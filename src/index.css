@@ -11,3 +11,36 @@ code {
   font-family: source-code-pro, Menlo, Monaco, Consolas, 'Courier New',
     monospace;
 }
+
+.app {
+  width: 100%;
+  display: flex;
+  min-height: 100vh;
+  justify-content: center;
+  /* align-items: center; */
+}
+
+.btn-wrapper {
+  margin-top: 10px;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  gap: 10px
+}
+
+.btn-wrapper button {
+  outline: none;
+  background: #fff;
+  cursor: pointer;
+  padding: 10px 12px;
+  border: 1px solid #000;
+}
+
+.btn-wrapper button.active {
+  background: #000;
+  color: #fff;
+}
+
+.converter-wrapper {
+  padding: 1rem;
+}
