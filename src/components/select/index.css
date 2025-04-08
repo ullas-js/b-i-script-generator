@@ -1,0 +1,48 @@
+.o-select-wrapper {
+    position: relative;
+    width: 250px;
+    font-family: sans-serif;
+}
+
+.o-select {
+    background: #f1f1f1;
+    padding: 10px 12px;
+    border: 1px solid #ccc;
+    border-radius: 6px;
+    cursor: pointer;
+    user-select: none;
+}
+
+.o-select-options {
+    position: absolute;
+    top: 100%;
+    left: 0;
+    right: 0;
+    background: #fff;
+    border: 1px solid #ccc;
+    border-radius: 6px;
+    max-height: 200px;
+    overflow-y: auto;
+    margin-top: 4px;
+    z-index: 1000;
+    box-shadow: 0 5px 15px rgba(0, 0, 0, 0.1);
+}
+
+.o-select-option {
+    padding: 10px 12px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    cursor: pointer;
+}
+
+.o-select-option:hover {
+    background-color: #f5f5f5;
+}
+
+.o-select-tick {
+    width: 20px;
+    display: inline-block;
+    color: green;
+    font-weight: bold;
+}

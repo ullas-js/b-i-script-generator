@@ -2,6 +2,7 @@ import { useMemo, useState } from "react";
 import * as XLSX from 'xlsx';
 import ColumnSelector from "./columseletor";
 import './ui.css';
+import BatchExtraction from "./instruction";
 
 const ConvertFile = () => {
     const [file, setFile] = useState(null);
@@ -12,6 +13,7 @@ const ConvertFile = () => {
     const [colDirection, setColDirection] = useState('horizontal');
     const [columns, setColumns] = useState({});
     const [html, setHtml] = useState({});
+    const [checkMerge, setCheckMerge] = useState(false);
 
     const handleFile = (e) => setFile(e.target.files[0]);
 
@@ -141,14 +143,14 @@ const ConvertFile = () => {
 
     const replaceHeader = (header) => header ? header?.toString().toLowerCase().replace(/[\s\-()\/\\@#.,]+/g, '_').replace(/[^a-z0-9_]/g, '').replace(/^_+|_+$/g, '') : '';
 
-    const generateSqlQuery = () => {
-        if (mergedColumns.length < 2) return;
+    const generateSqlQuery = (list) => {
+        if (list.length < 2) return;
 
         const tableName = selectedSheet.toLowerCase().replace(/\s+/g, '_');
         let headers = [];
 
         if (colDirection === 'horizontal') {
-            headers = mergedColumns[0].map((h, i) =>
+            headers = list[0].map((h, i) =>
                 hasHeader
                     ? replaceHeader(h) || `col_${i}`
                     : `col_${i}`
@@ -156,7 +158,7 @@ const ConvertFile = () => {
         } else {
             // Vertical headers (mapping
             //  from each row's first column)
-            headers = mergedColumns.map((row, i) =>
+            headers = list.map((row, i) =>
                 hasHeader
                     ? replaceHeader(row[0]) || `col_${i}`
                     : `col_${i}`
@@ -164,18 +166,18 @@ const ConvertFile = () => {
         }
 
         const createTable = headers.map((header, i) => {
-            const value = mergedColumns[1][i];
+            const value = list[1][i];
             return `\`${header}\` ${getSqlType(value)}`;
         }).join(",\n    ");
 
         const createQuery = `CREATE TABLE \`${tableName}\` (\n    ${createTable}\n);`;
 
         const values = (colDirection === 'horizontal'
-            ? mergedColumns.slice(hasHeader ? 1 : 0).map(row =>
+            ? list.slice(hasHeader ? 1 : 0).map(row =>
                 `(${row.map(cell => `"${(cell ?? '').toString().replace(/"/g, '\\"').trim()}"`).join(', ')})`
             )
-            : mergedColumns[0].map((_, colIndex) =>
-                `(${mergedColumns.map(row =>
+            : list[0].map((_, colIndex) =>
+                `(${list.map(row =>
                     `"${(row[colIndex] ?? '').toString().replace(/"/g, '\\"').trim()}"`
                 ).join(', ')})`
             ).splice(hasHeader ? 1 : 0)
@@ -197,19 +199,19 @@ const ConvertFile = () => {
         URL.revokeObjectURL(url);
     };
 
-    const downloadSheet = () => {
+    const downloadSheet = (list) => {
         const workbook = XLSX.utils.book_new();
         let headers = [];
 
         if (colDirection === 'horizontal') {
-            headers = mergedColumns[0].map((h, i) =>
+            headers = list[0].map((h, i) =>
                 hasHeader
                     ? replaceHeader(h) || `col_${i}`
                     : `col_${i}`
             );
         } else {
             // Vertical headers (collecting from each row's first column)
-            headers = mergedColumns.map((row, i) =>
+            headers = list.map((row, i) =>
                 hasHeader
                     ? replaceHeader(row[0]) || `col_${i}`
                     : `col_${i}`
@@ -218,11 +220,11 @@ const ConvertFile = () => {
 
 
         const data = colDirection === 'horizontal'
-            ? mergedColumns.slice(hasHeader ? 1 : 0).map(row =>
+            ? list.slice(hasHeader ? 1 : 0).map(row =>
                 row.map(cell => `${(cell ?? '').toString().replace(/"/g, '\\"')}`)
             )
-            : mergedColumns[0].map((_, colIndex) =>
-                mergedColumns.map(row =>
+            : list[0].map((_, colIndex) =>
+                list.map(row =>
                     `${(row[colIndex] ?? '').toString().replace(/"/g, '\\"')}`
                 )
             ).splice(hasHeader ? 1 : 0);
@@ -233,8 +235,20 @@ const ConvertFile = () => {
         XLSX.writeFile(workbook, `${selectedSheet}.xlsx`);
     };
 
+    const handleMerge = () => {
+        if (colDirection !== 'horizontal') {
+            setCheckMerge(false);
+            return;
+        }
+
+        setCheckMerge(true);
+    }
+
+    const [data, setData] = useState([]);
+
     return (
         <div className="converter-wrapper">
+            <BatchExtraction columns={mergedColumns} setColumns={(e) => setData(e)} isOpen={checkMerge} onClose={() => setCheckMerge(false)} />
             <div className="sheet-buttons">
                 <input type="file" className="btn" onChange={handleFile} />
                 <button className="btn active" onClick={handleConvert}>Load Sheets</button>
@@ -251,6 +265,10 @@ const ConvertFile = () => {
                     </button>
                 ))}
             </div>
+
+            {/* <div key={selectedSheet} className="table-container">
+                <div dangerouslySetInnerHTML={{ __html: html[selectedSheet] }} />
+            </div> */}
 
             {selectedSheet && (
                 <>
@@ -291,24 +309,26 @@ const ConvertFile = () => {
                     />
                     {colDirection === 'horizontal' ? 'Horizontal' : 'Vertical'}
                 </label>
+
+                <button className="btn merge-modal-button" onClick={handleMerge}>
+                    Merge (Batch Instruction)
+                </button>
             </div>
 
-            <div className="table-wrapper">
-
-
+            <div className="table-container">
                 {mergedColumns.length > 0 && (
                     colDirection === 'horizontal' ? (
                         <table>
                             <thead>
                                 <tr>
                                     {hasHeader
-                                        ? mergedColumns[0].map((cell, i) => <th key={i}>{cell}</th>)
-                                        : mergedColumns[0].map((_, i) => <th key={i}>Column {i + 1}</th>)
+                                        ? (data.length > 0 ? data : mergedColumns)[0].map((cell, i) => <th key={i}>{cell}</th>)
+                                        : (data.length > 0 ? data : mergedColumns)[0].map((_, i) => <th key={i}>Column {i + 1}</th>)
                                     }
                                 </tr>
                             </thead>
                             <tbody>
-                                {mergedColumns.slice(hasHeader ? 1 : 0).map((row, i) => (
+                                {(data.length > 0 ? data : mergedColumns).slice(hasHeader ? 1 : 0).map((row, i) => (
                                     <tr key={i}>
                                         {row.map((cell, j) => <td key={j}>{cell}</td>)}
                                     </tr>
@@ -320,11 +340,11 @@ const ConvertFile = () => {
                             <thead>
                                 <tr>
                                     {hasHeader
-                                        ? mergedColumns.map((cell, i) => {
+                                        ? (data.length > 0 ? data : mergedColumns).map((cell, i) => {
                                             return <th key={i}>{cell[0]}</th>;
                                         })
                                         :
-                                        mergedColumns.map((_, i) => (
+                                        (data.length > 0 ? data : mergedColumns).map((_, i) => (
                                             <th key={i}>Row {i + 1}</th>
                                         ))
                                     }
@@ -332,7 +352,7 @@ const ConvertFile = () => {
                             </thead>
                             <tbody>
                                 <tr>
-                                    {mergedColumns.map((cell, i) => {
+                                    {(data.length > 0 ? data : mergedColumns).map((cell, i) => {
                                         return <td key={i}>{cell[1]}</td>;
                                     })}
                                 </tr>
@@ -341,13 +361,18 @@ const ConvertFile = () => {
                     )
                 )}
             </div>
+
             {mergedColumns.length > 0 && (
                 <div className="btn-wrapper">
-                    <button onClick={generateSqlQuery}>Download SQL</button>
-                    <button onClick={downloadSheet}>Download Sheet</button>
+                    <button onClick={() => generateSqlQuery(data.length > 0 ? data : mergedColumns)}>Download SQL</button>
+                    <button onClick={() => downloadSheet(data.length > 0 ? data : mergedColumns)}>Download Sheet</button>
                     <button onClick={() => {
-                        setSelections([]);
-                        setColumns({});
+                        if (data.length === 0) {
+                            setSelections([]);
+                            setColumns({});
+                        } else {
+                            setData([]);
+                        }
                     }}>Reset</button>
                 </div>
             )}
