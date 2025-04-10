@@ -1,7 +1,7 @@
 import { useEffect } from "react";
 import { createPortal } from "react-dom";
 
-const Modal = ({ children, isOpen, onClose }) => {
+const Modal = ({ children, isOpen, onClose, maxWidth = "600px" }) => {
     useEffect(() => {
         const handleEsc = (e) => {
             if (e.key === "Escape") onClose();
@@ -13,10 +13,8 @@ const Modal = ({ children, isOpen, onClose }) => {
 
     useEffect(() => {
         const modalRoot = document.getElementById("modal-root");
-        if (isOpen) {
-            modalRoot.style.zIndex = "1000";
-        } else {
-            modalRoot.style.zIndex = "-1";
+        if (modalRoot) {
+            modalRoot.style.zIndex = isOpen ? "1000" : "-1";
         }
     }, [isOpen]);
 
@@ -24,7 +22,14 @@ const Modal = ({ children, isOpen, onClose }) => {
 
     return createPortal(
         <div className="modal-overlay">
-            <div className="modal-content">
+            <div
+                className="modal-content"
+                style={{
+                    maxWidth,
+                    width: "100%",
+                    margin: "0 auto"
+                }}
+            >
                 <button className="modal-close" onClick={onClose}>&times;</button>
                 {children}
             </div>

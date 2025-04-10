@@ -2,7 +2,8 @@ import { useMemo, useState } from "react";
 import * as XLSX from 'xlsx';
 import ColumnSelector from "./columseletor";
 import './ui.css';
-import BatchExtraction from "./instruction";
+import BatchExtractionMerge from "./instruction";
+import BatchExtraction from "./batch-instruction";
 
 const ConvertFile = () => {
     const [file, setFile] = useState(null);
@@ -14,6 +15,7 @@ const ConvertFile = () => {
     const [columns, setColumns] = useState({});
     const [html, setHtml] = useState({});
     const [checkMerge, setCheckMerge] = useState(false);
+    const [isOpen, setIsOpen] = useState(false);
 
     const handleFile = (e) => setFile(e.target.files[0]);
 
@@ -45,6 +47,10 @@ const ConvertFile = () => {
         return html;
     }
 
+    const isBatchInstruction = useMemo(() => {
+        if (!selectedSheet) return false;
+        return selectedSheet.toLowerCase().replace(' ', '_').includes('instruction');
+    }, [selectedSheet])
 
     const handleConvert = () => {
         if (!file) return;
@@ -248,7 +254,7 @@ const ConvertFile = () => {
 
     return (
         <div className="converter-wrapper">
-            <BatchExtraction columns={mergedColumns} setColumns={(e) => setData(e)} isOpen={checkMerge} onClose={() => setCheckMerge(false)} />
+            <BatchExtractionMerge columns={mergedColumns} setColumns={(e) => setData(e)} isOpen={checkMerge} onClose={() => setCheckMerge(false)} />
             <div className="sheet-buttons">
                 <input type="file" className="btn" onChange={handleFile} />
                 <button className="btn active" onClick={handleConvert}>Load Sheets</button>
@@ -309,10 +315,6 @@ const ConvertFile = () => {
                     />
                     {colDirection === 'horizontal' ? 'Horizontal' : 'Vertical'}
                 </label>
-
-                <button className="btn merge-modal-button" onClick={handleMerge}>
-                    Merge (Batch Instruction)
-                </button>
             </div>
 
             <div className="table-container">
@@ -362,9 +364,26 @@ const ConvertFile = () => {
                 )}
             </div>
 
+            {isBatchInstruction && (
+                <BatchExtraction columns={data} selectedSheet={selectedSheet} isOpen={isOpen} onClose={() => setIsOpen(false)} />
+            )}
+
             {mergedColumns.length > 0 && (
                 <div className="btn-wrapper">
-                    <button onClick={() => generateSqlQuery(data.length > 0 ? data : mergedColumns)}>Download SQL</button>
+                    {!isBatchInstruction ? <button onClick={() => generateSqlQuery(data.length > 0 ? data : mergedColumns)}>Download SQL</button>
+                        :
+                        (
+                            <>
+                                {data.length > 0 ? <button onClick={() => setIsOpen(true)}>
+                                    Open Batch Instruction Query Creation
+                                </button> :
+                                    <button className="btn merge-modal-button" onClick={handleMerge}>
+                                        Merge (Batch Instruction)
+                                    </button>
+                                }
+                            </>
+                        )
+                    }
                     <button onClick={() => downloadSheet(data.length > 0 ? data : mergedColumns)}>Download Sheet</button>
                     <button onClick={() => {
                         if (data.length === 0) {

@@ -1,5 +1,5 @@
 import { BrowserRouter, Routes, Route } from "react-router-dom"
-import { HomePage, RowMergePage } from "./pages"
+import { HomePage, RowMergePage, ReadFormula } from "./pages"
 
 export default function App() {
   return (
@@ -8,6 +8,7 @@ export default function App() {
         <Routes>
           <Route path="/" element={<HomePage />} />
           <Route path="/row-merge" element={<RowMergePage />} />
+          <Route path="/read-formula" element={<ReadFormula />} />
         </Routes>
       </div>
     </BrowserRouter>

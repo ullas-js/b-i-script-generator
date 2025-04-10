@@ -30,25 +30,47 @@ const parseAmount = (value) => {
 
 
 const parsePackingLabel = (text) => {
-    const regex = /^\(([\d.]+)\)\s+([\d.,]+)\s*(kg|g|lb)?\s*(.*?)\s*(\(.*?\))?$/i;
-    const match = text?.match(regex);
+    if (!text) return null;
 
-    if (!match) return null;
+    // Pattern 1: (5) 20 kg sugar
+    const pattern1 = /^\(([\d.]+)\)\s+([\d.,]+)\s*(kg|g|lb)?\s*(.*?)\s*(\(.*?\))?$/i;
 
-    const count = parseFloat(match[1]);
-    const weight = match[2];
-    const unit = match[3] || '';
-    const type = match[4]?.trim().toLowerCase();
+    // Pattern 2: Synthetic Caffeine (1x20 kg bag)
+    const pattern2 = /^(.*?)\s*\(\s*(\d+)\s*x\s*([\d.,]+)\s*(kg|g|lb)\s*(.*?)?\)$/i;
 
-    return {
-        key: `${weight} ${unit} ${type}`.trim(), // Exclude anything in ( )
-        count,
-        display: (total) => `(${total}) ${weight} ${unit} ${type}`.trim()
-    };
+    let match = text.match(pattern1);
+    if (match) {
+        const count = parseFloat(match[1]);
+        const weight = match[2];
+        const unit = match[3] || '';
+        const type = match[4]?.trim().toLowerCase();
+
+        return {
+            key: `${weight} ${unit} ${type}`.trim(),
+            count,
+            display: (_) => `${weight} ${unit} ${type}`.trim()
+        };
+    }
+
+    match = text.match(pattern2);
+    if (match) {
+        const type = match[1]?.trim().toLowerCase();
+        const count = parseInt(match[2]);
+        const weight = match[3];
+        const unit = match[4];
+        return {
+            key: `${weight} ${unit} ${type}`.trim(),
+            count,
+            display: (_) => `${type} (${weight} ${unit})`
+        };
+    }
+
+    return null;
 };
 
 
-const BatchExtraction = ({ isOpen, onClose, columns, setColumns }) => {
+
+const BatchExtractionMerge = ({ isOpen, onClose, columns, setColumns }) => {
     const [merge, setMerge] = useState({
         with: '',
         addition: [], // Columns to aggregate; other columns will retain their first occurrence's value
@@ -146,4 +168,4 @@ const BatchExtraction = ({ isOpen, onClose, columns, setColumns }) => {
     );
 };
 
-export default BatchExtraction;
+export default BatchExtractionMerge;
