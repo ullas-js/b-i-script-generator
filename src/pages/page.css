@@ -1,11 +1,82 @@
 .read-formula-content {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    justify-content: center;
-    height: 100vh;
-    width: 100vw;
-    background-color: #f8f8f8;
-    font-family: Arial, sans-serif;
+    max-width: 800px;
+    margin: 2rem auto;
+    padding: 2rem;
+    background-color: #ffffff;
+    border-radius: 12px;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+}
+
+.read-formula-content h1 {
+    font-size: 2rem;
+    margin-bottom: 1.5rem;
+    text-align: center;
+}
+
+.read-formula-content input[type="file"] {
+    display: inline-block;
+    padding: 0.5rem;
+    border-radius: 6px;
+    border: 1px solid #ccc;
+    background-color: #f9f9f9;
+    font-size: 1rem;
+    cursor: pointer;
+}
+
+.read-formula-content button {
+    padding: 0.5rem 1rem;
+    font-size: 1rem;
+    background-color: #007bff;
+    color: white;
+    border: none;
+    border-radius: 6px;
+    cursor: pointer;
+    transition: background-color 0.2s ease;
+}
+
+.read-formula-content button:disabled {
+    background-color: #ccc;
+    cursor: not-allowed;
+}
+
+.read-formula-content button:not(:disabled):hover {
+    background-color: #0056b3;
+}
+
+.read-formula-content code {
+    display: block;
+    margin-top: 1rem;
+    font-size: 0.95rem;
+    color: #555;
+}
+
+.read-formula-content .code-block {
+    white-space: pre-wrap;
+    word-break: break-word;
+    overflow-y: auto;
+    background-color: #f0f0f0;
+    padding: 1rem;
+    border-radius: 8px;
+    height: 500px;
+    font-family: 'Courier New', Courier, monospace;
+    margin-top: 1rem;
+}
+
+.read-formula-content pre {
+    white-space: pre-wrap;
+    word-break: break-word;
+    overflow-y: auto;
+    background-color: #f0f0f0;
+    padding: 1rem;
+    border-radius: 8px;
+    font-family: 'Courier New', Courier, monospace;
+    margin-top: 1rem;
+}
+
+.read-formula-content strong {
     color: #333;
+    font-weight: 600;
+    display: block;
+    margin-top: 1rem;
 }

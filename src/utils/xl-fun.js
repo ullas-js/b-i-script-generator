@@ -12,48 +12,45 @@ export const readExcelFile = (file, setQuery) => {
         });
 
         const sheets = workbook.SheetNames;
+        const result = {
+            instructions: { create: '', insert: '' },
+            ingredients: { create: '', insert: '' },
+            templates: { create: '', insert: '' }
+        };
 
-        sheets.forEach((sheetName) => {
+        for (const sheetName of sheets) {
             const sheet = workbook.Sheets[sheetName];
-            const formulas = XLSX.utils.sheet_to_formulae(sheet);
             const jsonData = XLSX.utils.sheet_to_json(sheet, { header: 1, defval: '' });
 
-            sheetFormulasMap.set(sheetName, { formulas, jsonData });
+            const formulaMap = new Map();
+            Object.entries(sheet).forEach(([cell, cellData]) => {
+                if (cellData && cellData.f) {
+                    formulaMap.set(cell, '=' + cellData.f);
+                }
+            });
+
+            sheetFormulasMap.set(sheetName, { formulaMap, jsonData });
 
             const { stepsSQL, ingredientsSQL, instructionTemplatesSQL } = generateStepsSQL(jsonData, sheetName);
 
-            if (stepsSQL.create && stepsSQL.insert) {
-                console.log(`\n---- ${sheetName} ----`);
-                console.log('-- Batch Instructions SQL --');
-                console.log(stepsSQL.create);
-                console.log(stepsSQL.insert);
+            // Append only if insert statements exist
+            if (stepsSQL.insert) {
+                result.instructions.create ||= stepsSQL.create;
+                result.instructions.insert += stepsSQL.insert + '\n';
             }
 
-            if (ingredientsSQL.create && ingredientsSQL.insert) {
-                console.log('-- Ingredients SQL --');
-                console.log(ingredientsSQL.create);
-                console.log(ingredientsSQL.insert);
+            if (ingredientsSQL.insert) {
+                result.ingredients.create ||= ingredientsSQL.create;
+                result.ingredients.insert += ingredientsSQL.insert + '\n';
             }
 
-            if (instructionTemplatesSQL.create && instructionTemplatesSQL.insert) {
-                console.log('-- Instruction Templates SQL --');
-                console.log(instructionTemplatesSQL.create);
-                console.log(instructionTemplatesSQL.insert);
+            if (instructionTemplatesSQL.insert) {
+                result.templates.create ||= instructionTemplatesSQL.create;
+                result.templates.insert += instructionTemplatesSQL.insert + '\n';
             }
+        }
 
-            setQuery((prev) => {
-                return [
-                    prev,
-                    `-- ${sheetName} --`,
-                    stepsSQL.create,
-                    stepsSQL.insert,
-                    ingredientsSQL.create,
-                    ingredientsSQL.insert,
-                    instructionTemplatesSQL.create,
-                    instructionTemplatesSQL.insert
-                ].filter(Boolean).join('\n\n');
-            });
-        });
+        setQuery(result);
     };
 
     reader.readAsBinaryString(file);
@@ -66,7 +63,7 @@ const escapeSQL = (v) =>
 
 const cleanDescription = (text) => {
     if (!text) return '';
-    return text.replace(/\s*\([^()]*\)\s*/g, '').trim(); // removes text inside parentheses
+    return text.replace(/\s*\([^()]*\)\s*/g, '').trim();
 };
 
 const normalizeDescription = (text) => {
@@ -92,13 +89,7 @@ const ingredientKey = (ing) => {
 };
 
 const generateStepsSQL = (data, sheetName = '') => {
-    const sheetFormulas = sheetFormulasMap.get(sheetName)?.formulas || [];
-    const formulaMap = new Map();
-    sheetFormulas.forEach(f => {
-        const [cell, formula] = f.split('=');
-        if (cell && formula) formulaMap.set(cell.trim(), '=' + formula.trim());
-    });
-
+    const { formulaMap = new Map() } = sheetFormulasMap.get(sheetName) || {};
     const templateMap = new Map();
 
     const headerKeywords = [
@@ -136,16 +127,28 @@ const generateStepsSQL = (data, sheetName = '') => {
         };
     }
 
+    const normalize = (str) =>
+        str.toLowerCase().replace(/[^a-z0-9]/g, '');
+
     const getIndex = (key) => {
+        const normalizedKey = normalize(key);
         const keys = Object.keys(headerMap);
-        const normalizedKey = key.toLowerCase();
-        const found = keys.find(k => k.includes(normalizedKey));
+        const found = keys.find(k => normalize(k).includes(normalizedKey));
         return found !== undefined ? headerMap[found] : -1;
     };
 
-    const actionIdx = getIndex('action') !== -1
-        ? getIndex('action')
-        : getIndex('instruction');
+    let actionIdx = getIndex('action');
+    if (actionIdx === -1) actionIdx = getIndex('instruction');
+    if (actionIdx === -1) actionIdx = getIndex('ingredient');
+
+    if (actionIdx === -1) {
+        console.warn(`⚠️ No action/instruction/ingredient column found in sheet: ${sheetName}`);
+        return {
+            stepsSQL: { create: '', insert: '' },
+            ingredientsSQL: { create: '', insert: '' },
+            instructionTemplatesSQL: { create: '', insert: '' }
+        };
+    }
 
     const fieldIndexes = {
         vendor: getIndex('vendor'),
@@ -160,43 +163,69 @@ const generateStepsSQL = (data, sheetName = '') => {
 
     const steps = [];
     const ingredientMap = new Map();
-    let currentStepNo = 0;
+    const stepIngredientSeqMap = new Map(); // Track ingredient sequence per step
+    const stepIdx = getIndex('step');
+    let currentStepNo = null;
+    let currentStepSeq = 0;
 
     for (let i = headerRowIndex + 1; i < data.length; i++) {
         const row = data[i];
         if (!Array.isArray(row)) continue;
 
-        const actionCell = row[actionIdx];
-        const action = typeof actionCell === 'string' ? actionCell.trim() : '';
+        const rawStep = row[stepIdx];
+        const stepIsHeader = rawStep !== undefined && rawStep !== null && rawStep !== '' &&
+            /^\d+(\.0+)?$/.test(String(rawStep).trim());
 
-        const isInstruction = action.length > 20;
-        const isCode = /^[A-Z0-9]+$/.test(action) && action.length < 20;
-        const isNumeric = /^\d+(\.\d+)?$/.test(action);
+        if (stepIsHeader) {
+            currentStepNo = parseInt(rawStep);
+            currentStepSeq++;
 
-        if (isInstruction && !isCode && !isNumeric) {
-            currentStepNo++;
-            steps.push({ step_no: currentStepNo, action });
+            const action = String(row[actionIdx] || '').trim();
+            if (action) {
+                steps.push({ step_no: currentStepNo, action });
 
-            const cellAddress = XLSX.utils.encode_cell({ r: i, c: actionIdx });
-            const formula = formulaMap.get(cellAddress);
+                const cellAddress = XLSX.utils.encode_cell({ r: i, c: actionIdx });
+                const formula = formulaMap.get(cellAddress);
 
-            if (formula && formula.includes('&')) {
-                const generalized = formula
-                    .replace(/"\s*&\s*/g, '')
-                    .replace(/\s*&\s*"/g, '')
-                    .replace(/&/g, '')
-                    .replace(/"([^"]*)"/g, '$1')
-                    .replace(/\b([A-Z]+\d+)\b/g, '{$1}')
-                    .trim();
+                if (formula && formula.includes('&')) {
+                    let generalized = formula
+                        .replace(/^=/, '')
+                        .replace(/TEXT\(\s*([^,]+).*?\)/gi, '$1')
+                        .replace(/"\s*&\s*/g, '')
+                        .replace(/\s*&\s*"/g, '')
+                        .replace(/&/g, '')
+                        .replace(/"([^"]*)"/g, '$1')
+                        .trim();
 
-                if (!templateMap.has(generalized)) {
-                    templateMap.set(generalized, true);
+                    const cellRefRegex = /\$?([A-Z]+)\$?(\d+)/g;
+                    generalized = generalized.replace(cellRefRegex, (_, col, row) => {
+                        const colIndex = XLSX.utils.decode_col(col);
+                        const rowIndex = parseInt(row, 10) - 1;
+
+                        let placeholder = '';
+                        if (data[headerRowIndex]?.[colIndex]) {
+                            placeholder = String(data[headerRowIndex][colIndex]).toLowerCase().trim();
+                        }
+                        if (!placeholder && data[rowIndex]?.[colIndex]) {
+                            placeholder = String(data[rowIndex][colIndex]).toLowerCase().trim();
+                        }
+                        placeholder = placeholder.replace(/[^a-z0-9]+/gi, '_').replace(/^_+|_+$/g, '');
+
+                        return `{${placeholder || 'unknown'}}`;
+                    });
+
+                    if (!templateMap.has(generalized)) {
+                        templateMap.set(generalized, true);
+                    }
                 }
             }
+        } else if (currentStepNo !== null) {
+            const currentSeq = (stepIngredientSeqMap.get(currentStepNo) || 0) + 1;
+            stepIngredientSeqMap.set(currentStepNo, currentSeq);
 
-        } else if (action) {
             const ing = {
                 step_no: currentStepNo,
+                step_seq: currentSeq,
                 vendor: row[fieldIndexes.vendor] || '',
                 incredient_description: normalizeDescription(cleanDescription(row[fieldIndexes.incredient_description] || '')),
                 type: row[fieldIndexes.type] || '',
@@ -207,13 +236,7 @@ const generateStepsSQL = (data, sheetName = '') => {
                 mixer_needed: row[fieldIndexes.mixer_needed] || ''
             };
 
-            const existing = Array.from(ingredientMap.values()).find(
-                i => Object.keys(i).filter(k => k !== 'step_no').every(k => i[k] === ing[k])
-            );
-
-            if (!existing) {
-                ingredientMap.set(ingredientKey(ing), ing);
-            }
+            ingredientMap.set(`${currentStepNo}_${i}`, ing);
         }
     }
 
@@ -222,21 +245,56 @@ const generateStepsSQL = (data, sheetName = '') => {
     const stepsSQL = {
         create: `
         CREATE TABLE batch_instructions (
-          step_no INT,
-          action TEXT
+          step_no TEXT,
+          action TEXT,
+          ingredients TEXT
         );`.trim(),
 
-        insert: steps
-            .map(({ step_no, action }) =>
-                `INSERT INTO batch_instructions (step_no, action) VALUES (${step_no}, ${escapeSQL(action)});`
-            )
-            .join('\n')
+        insert: (() => {
+            const uniqueSteps = new Map();
+
+            steps
+                .filter(({ step_no, action }) => Number.isInteger(step_no))
+                .forEach(({ step_no, action }) => {
+                    const uniqueIngredients = new Set();
+                    const ingredientsStr = ingredients
+                        .filter(ing => {
+                            if (ing.step_no !== step_no) return false;
+                            const key = ing.incredient_description?.toLowerCase().trim();
+                            if (uniqueIngredients.has(key)) return false;
+                            uniqueIngredients.add(key);
+                            return true;
+                        })
+                        .map(ing => ing.incredient_description)
+                        .join('\n');
+
+                    const key = `${action}__${ingredientsStr}`;
+                    if (!uniqueSteps.has(key)) {
+                        uniqueSteps.set(key, {
+                            step_nos: [step_no],
+                            action,
+                            ingredientsStr,
+                        });
+                    } else {
+                        uniqueSteps.get(key).step_nos.push(step_no);
+                    }
+                });
+
+            return Array.from(uniqueSteps.values())
+                .map(({ step_nos, action, ingredientsStr }) => {
+                    const stepNoCombined = step_nos.join(', ');
+                    return `INSERT INTO batch_instructions (step_no, action, ingredients) VALUES (${escapeSQL(stepNoCombined)}, ${escapeSQL(action)}, ${escapeSQL(ingredientsStr)});`;
+                })
+                .join('\n');
+        })(),
     };
+
 
     const ingredientsSQL = {
         create: `
         CREATE TABLE ingredients (
           step_no INT,
+          step_seq INT,
           vendor TEXT,
           incredient_description TEXT,
           type TEXT,
@@ -247,9 +305,35 @@ const generateStepsSQL = (data, sheetName = '') => {
         );`.trim(),
 
         insert: ingredients
+            .filter(({ step_seq, incredient_description, vendor, type, speed, temp, concentration, mixer_needed }) => {
+                const hasSomeContent = [
+                    incredient_description,
+                    vendor,
+                    type,
+                    speed,
+                    temp,
+                    concentration,
+                    mixer_needed
+                ].some(val => !!val && val.toString().trim());
+
+                const notSummaryRow = (incredient_description || "").toLowerCase().trim() !== "total syrup weight" &&
+                    (temp || "").toLowerCase().trim() !== "total syrup volume";
+
+                return hasSomeContent && notSummaryRow;
+            })
+            .filter(({ step_seq, incredient_description, vendor }, i, arr) => {
+                if (i === 0) return true;
+                const prev = arr[i - 1];
+                return (
+                    step_seq !== prev.step_seq ||
+                    incredient_description !== prev.incredient_description ||
+                    vendor !== prev.vendor
+                );
+            })
             .map(ing => {
                 const values = [
-                    ing.step_no,
+                    parseInt(ing.step_no),
+                    parseInt(ing.step_seq),
                     escapeSQL(ing.vendor),
                     escapeSQL(ing.incredient_description),
                     escapeSQL(ing.type),
