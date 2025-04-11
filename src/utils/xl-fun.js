@@ -182,6 +182,16 @@ const generateStepsSQL = (data, sheetName = '') => {
 
             const action = String(row[actionIdx] || '').trim();
             if (action) {
+                // Check if the previous step has the same action
+                const previousStep = steps[steps.length - 1];
+                if (
+                    previousStep &&
+                    previousStep.action === action
+                ) {
+                    // Skip adding this step if the action is the same as the previous step
+                    continue;
+                }
+
                 steps.push({ step_no: currentStepNo, action });
 
                 const cellAddress = XLSX.utils.encode_cell({ r: i, c: actionIdx });
@@ -194,7 +204,7 @@ const generateStepsSQL = (data, sheetName = '') => {
                         .replace(/"\s*&\s*/g, '')
                         .replace(/\s*&\s*"/g, '')
                         .replace(/&/g, '')
-                        .replace(/"([^"]*)"/g, '$1')
+                        .replace(/"([^\"]*)"/g, '$1')
                         .trim();
 
                     const cellRefRegex = /\$?([A-Z]+)\$?(\d+)/g;
@@ -245,91 +255,43 @@ const generateStepsSQL = (data, sheetName = '') => {
     const stepsSQL = {
         create: `
         CREATE TABLE batch_instructions (
-          step_no TEXT,
-          action TEXT,
-          ingredients TEXT
+          step_no int,
+          action varchar(255),
+          ingredients varchar(255)
         );`.trim(),
 
-        insert: (() => {
-            const uniqueSteps = new Map();
-
-            steps
-                .filter(({ step_no, action }) => Number.isInteger(step_no))
-                .forEach(({ step_no, action }) => {
-                    const uniqueIngredients = new Set();
-                    const ingredientsStr = ingredients
-                        .filter(ing => {
-                            if (ing.step_no !== step_no) return false;
-                            const key = ing.incredient_description?.toLowerCase().trim();
-                            if (uniqueIngredients.has(key)) return false;
-                            uniqueIngredients.add(key);
-                            return true;
-                        })
+        insert: steps
+            .map(({ action }, index) => {
+                const step_no = index + 1; // Use index + 1 as step number
+                const uniqueIngredients = new Set(
+                    ingredients
+                        .filter(ing => ing.step_no === step_no && ing.incredient_description.trim() !== '') // Exclude empty ingredients
                         .map(ing => ing.incredient_description)
-                        .join('\n');
+                ); // Remove duplicate ingredients
 
-                    const key = `${action}__${ingredientsStr}`;
-                    if (!uniqueSteps.has(key)) {
-                        uniqueSteps.set(key, {
-                            step_nos: [step_no],
-                            action,
-                            ingredientsStr,
-                        });
-                    } else {
-                        uniqueSteps.get(key).step_nos.push(step_no);
-                    }
-                });
+                const ingredientsStr = Array.from(uniqueIngredients).join(', '); // Join unique ingredients with commas
 
-            return Array.from(uniqueSteps.values())
-                .map(({ step_nos, action, ingredientsStr }) => {
-                    const stepNoCombined = step_nos.join(', ');
-                    return `INSERT INTO batch_instructions (step_no, action, ingredients) VALUES (${escapeSQL(stepNoCombined)}, ${escapeSQL(action)}, ${escapeSQL(ingredientsStr)});`;
-                })
-                .join('\n');
-        })(),
+                return `insert into batch_instructions (step_no, action, ingredients) values (${parseInt(step_no)}, ${escapeSQL(action)}, ${escapeSQL(ingredientsStr)});`;
+            })
+            .join('\n')
     };
-
 
     const ingredientsSQL = {
         create: `
         CREATE TABLE ingredients (
-          step_no INT,
-          step_seq INT,
-          vendor TEXT,
-          incredient_description TEXT,
-          type TEXT,
-          speed TEXT,
-          temp TEXT,
-          concentration TEXT,
-          mixer_needed TEXT
+          step_no int,
+          step_seq int,
+          vendor varchar(255),
+          incredient_description varchar(255),
+          type varchar(255),
+          speed varchar(255),
+          temp varchar(255),
+          concentration varchar(255),
+          mixer_needed varchar(255)
         );`.trim(),
 
         insert: ingredients
-            .filter(({ step_seq, incredient_description, vendor, type, speed, temp, concentration, mixer_needed }) => {
-                const hasSomeContent = [
-                    incredient_description,
-                    vendor,
-                    type,
-                    speed,
-                    temp,
-                    concentration,
-                    mixer_needed
-                ].some(val => !!val && val.toString().trim());
-
-                const notSummaryRow = (incredient_description || "").toLowerCase().trim() !== "total syrup weight" &&
-                    (temp || "").toLowerCase().trim() !== "total syrup volume";
-
-                return hasSomeContent && notSummaryRow;
-            })
-            .filter(({ step_seq, incredient_description, vendor }, i, arr) => {
-                if (i === 0) return true;
-                const prev = arr[i - 1];
-                return (
-                    step_seq !== prev.step_seq ||
-                    incredient_description !== prev.incredient_description ||
-                    vendor !== prev.vendor
-                );
-            })
+            .filter(ing => ing.incredient_description.trim() !== '') // Exclude empty ingredients
             .map(ing => {
                 const values = [
                     parseInt(ing.step_no),
@@ -342,7 +304,7 @@ const generateStepsSQL = (data, sheetName = '') => {
                     escapeSQL(ing.concentration),
                     escapeSQL(ing.mixer_needed)
                 ];
-                return `INSERT INTO ingredients VALUES (${values.join(', ')});`;
+                return `insert into ingredients values (${values.join(', ')});`;
             })
             .join('\n')
     };
@@ -350,13 +312,13 @@ const generateStepsSQL = (data, sheetName = '') => {
     const instructionTemplatesSQL = {
         create: `
         CREATE TABLE instruction_templates (
-          id INT PRIMARY KEY AUTO_INCREMENT,
-          template TEXT
+          id int primary key auto_increment,
+          variable varchar(255)
         );`.trim(),
 
         insert: Array.from(templateMap.keys())
             .map((tpl, idx) =>
-                `INSERT INTO instruction_templates (id, template) VALUES (${idx + 1}, ${escapeSQL(tpl)});`
+                `insert into instruction_templates (id, variable) values (${idx + 1}, ${escapeSQL(tpl)});`
             )
             .join('\n')
     };
