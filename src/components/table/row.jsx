@@ -1,25 +1,32 @@
-import { useContext } from "react";
-import { TableContext } from "./index";
+import React from 'react';
+import { TableContext } from './index';
 
-const Row = ({ row, rowIndex }) => {
-    const { updateCell } = useContext(TableContext);
-    
-    if (!row || typeof row !== 'object') {
-        return null;
-    }
+const Row = ({ rowIndex, row, onDragStart, onDragOver, onDrop, onDragEnd, isDragOver }) => {
+    const { updateCell, handleContextMenu, headers, setInputFocused } = React.useContext(TableContext);
 
     return (
-        <tr>
-            {Object.keys(row).map((key, index) => (
-                <td key={`cell-${rowIndex}-${index}-${key}`}>
+        <tr
+            draggable
+            onDragStart={onDragStart}
+            onDragOver={onDragOver}
+            onDrop={onDrop}
+            onDragEnd={onDragEnd}
+            className={isDragOver ? 'drag-over' : ''}
+            data-drag-type="row"
+        >
+            {headers.map((header, colIndex) => (
+                <td
+                    key={`cell-${rowIndex}-${colIndex}`}
+                    onContextMenu={(e) => handleContextMenu(e, rowIndex, colIndex)}
+                >
                     <input
                         type="text"
-                        value={row[key] || ''}
-                        onChange={(e) => {
-                            e.preventDefault();
-                            updateCell(rowIndex, index, e.target.value);
-                        }}
-                        placeholder={`Row ${rowIndex + 1}, ${key}`}
+                        value={row[header] || ''}
+                        onChange={(e) => updateCell(rowIndex, colIndex, e.target.value)}
+                        placeholder="Enter value"
+                        draggable={false}
+                        onFocus={() => setInputFocused(true)}
+                        onBlur={() => setInputFocused(false)}
                     />
                 </td>
             ))}

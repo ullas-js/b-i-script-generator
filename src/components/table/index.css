@@ -10,8 +10,10 @@
 
 .record-table {
     width: 100%;
-    border-collapse: collapse;
-    margin-bottom: 20px;
+    table-layout: fixed;
+    border-collapse: separate;
+    border-spacing: 0;
+    margin: 1rem 0;
 }
 
 .record-table th,
@@ -19,10 +21,24 @@
     border: 1px solid #ddd;
     padding: 8px;
     text-align: left;
+    min-width: 120px;
+    position: relative;
+    background-color: #fff;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
 }
 
 .record-table th {
-    background-color: #f2f2f2;
+    background-color: #f5f5f5;
+    font-weight: normal;
+    position: relative;
+    user-select: none;
+    cursor: move;
+}
+
+.record-table tr {
+    cursor: move;
 }
 
 .record-table input {
@@ -30,41 +46,143 @@
     padding: 4px;
     border: 1px solid #ddd;
     border-radius: 4px;
+    font-size: inherit;
+    font-family: inherit;
+    background-color: transparent;
+    cursor: text;
 }
 
-.record-table th input {
-    font-weight: bold;
-    background-color: #f2f2f2;
+.record-table input:focus {
+    outline: none;
+    border-color: #4a90e2;
+    background-color: #fff;
 }
 
-.record-table-input {
-    width: 100%;
-    padding: 0.5rem;
-    border: 1px solid #ccc;
-    border-radius: 4px;
-    font-size: 1rem;
-    box-sizing: border-box;
+.drag-over {
+    position: relative;
 }
 
+.drag-over::before {
+    content: '';
+    position: absolute;
+    background-color: #4a90e2;
+    z-index: 1;
+}
+
+.drag-over[data-drag-type="column"]::before {
+    top: 0;
+    bottom: 0;
+    width: 4px;
+    left: -2px;
+}
+
+.drag-over[data-drag-type="row"]::before {
+    left: 0;
+    right: 0;
+    height: 4px;
+    top: -2px;
+}
+
+.record-table tr.dragging,
+.record-table th.dragging {
+    opacity: 0.5;
+    background-color: #f0f0f0;
+}
+
+/* Hide scrollbar for Chrome, Safari and Opera */
+.table-container::-webkit-scrollbar {
+    display: none;
+}
+
+/* Hide scrollbar for IE, Edge and Firefox */
 .table-container {
-    margin: 20px;
+    -ms-overflow-style: none;  /* IE and Edge */
+    scrollbar-width: none;  /* Firefox */
 }
 
 .sql-container {
-    margin-top: 20px;
-    text-align: center;
+    margin-top: 1rem;
+    text-align: right;
+    position: sticky;
+    bottom: 0;
+    background-color: #fff;
+    padding: 8px;
+    border-top: 1px solid #ddd;
 }
 
 .sql-container button {
-    padding: 10px 20px;
-    background-color: #4CAF50;
+    padding: 8px 16px;
+    background-color: #4a90e2;
     color: white;
     border: none;
     border-radius: 4px;
     cursor: pointer;
-    font-size: 16px;
+    transition: background-color 0.2s;
 }
 
 .sql-container button:hover {
-    background-color: #45a049;
+    background-color: #357abd;
+}
+
+.context-menu {
+    background: white;
+    border: 1px solid #ddd;
+    border-radius: 4px;
+    box-shadow: 0 2px 5px rgba(0,0,0,0.2);
+    min-width: 150px;
+    z-index: 1000;
+}
+
+.context-menu-group {
+    padding: 4px 0;
+}
+
+.context-menu-item {
+    padding: 8px 12px;
+    cursor: pointer;
+    transition: background-color 0.2s;
+    color: #333;
+}
+
+.context-menu-item:hover {
+    background-color: #f5f5f5;
+}
+
+.context-menu-delete {
+    color: #dc3545;
+}
+
+.context-menu-delete:hover {
+    background-color: #ffebee;
+}
+
+.context-menu-divider {
+    height: 1px;
+    background-color: #ddd;
+    margin: 0;
+}
+
+.drag-handle-header,
+.drag-handle {
+    width: 30px !important;
+    min-width: 30px !important;
+    max-width: 30px !important;
+    padding: 0 !important;
+    border-right: 1px solid #ddd !important;
+    background-color: #f5f5f5 !important;
+}
+
+.drag-handle {
+    cursor: move;
+    user-select: none;
+    color: #666;
+    font-size: 1.2em;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.record-table tr:hover .drag-handle,
+.record-table th:hover .drag-handle {
+    background-color: #e8e8e8;
 }

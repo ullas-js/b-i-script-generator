@@ -324,7 +324,7 @@ const generateStepsSQL = (data, sheetName = '') => {
         rmstepseq: parseInt(ing.step_seq),
         rawmaterial: ing.rawmaterial,
         Vendor: ing.vendor,
-        Incredient_Description: ing.incredient_description,
+        Incredient_description: ing.incredient_description,
         Type: ing.type,
         Speed: ing.speed,
         Temp: ing.temp,
