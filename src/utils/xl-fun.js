@@ -12,11 +12,22 @@ export const readExcelFile = (file, setQuery) => {
         });
 
         const sheets = workbook.SheetNames;
-        const result = {
+        const sql = {
             instructions: { create: '', insert: '' },
             ingredients: { create: '', insert: '' },
             templates: { create: '', insert: '' }
         };
+
+        const table = {
+            instructions: {
+                headers: ['Step', 'Action'],
+                rows: []
+            },
+            ingredients: {
+                headers: ['Step', 'rmstepseq', 'rawmaterial', 'Vendor', 'Incredient_description', 'Type', 'Speed', 'Temp', 'Concentration', 'Mixerneeded'],
+                rows: []
+            }
+        }
 
         for (const sheetName of sheets) {
             const sheet = workbook.Sheets[sheetName];
@@ -31,26 +42,29 @@ export const readExcelFile = (file, setQuery) => {
 
             sheetFormulasMap.set(sheetName, { formulaMap, jsonData });
 
-            const { stepsSQL, ingredientsSQL, instructionTemplatesSQL } = generateStepsSQL(jsonData, sheetName);
+            const { stepsSQL, ingredientsSQL, instructionTemplatesSQL, instructionTable, incredientTable } = generateStepsSQL(jsonData, sheetName);
+
 
             // Append only if insert statements exist
             if (stepsSQL.insert) {
-                result.instructions.create ||= stepsSQL.create;
-                result.instructions.insert += stepsSQL.insert + '\n';
+                sql.instructions.create ||= stepsSQL.create;
+                sql.instructions.insert += stepsSQL.insert + '\n';
+                table.instructions.rows.push(...instructionTable.rows);
             }
 
             if (ingredientsSQL.insert) {
-                result.ingredients.create ||= ingredientsSQL.create;
-                result.ingredients.insert += ingredientsSQL.insert + '\n';
+                sql.ingredients.create ||= ingredientsSQL.create;
+                sql.ingredients.insert += ingredientsSQL.insert + '\n';
+                table.ingredients.rows.push(...incredientTable.rows);
             }
 
             if (instructionTemplatesSQL.insert) {
-                result.templates.create ||= instructionTemplatesSQL.create;
-                result.templates.insert += instructionTemplatesSQL.insert + '\n';
+                sql.templates.create ||= instructionTemplatesSQL.create;
+                sql.templates.insert += instructionTemplatesSQL.insert + '\n';
             }
         }
 
-        setQuery(result);
+        setQuery({ sql, table });
     };
 
     reader.readAsBinaryString(file);
@@ -76,16 +90,24 @@ const normalizeDescription = (text) => {
         .trim();
 };
 
-const ingredientKey = (ing) => {
-    return [
-        ing.step_no,
-        normalizeDescription(ing.incredient_description),
-        ing.type,
-        ing.speed,
-        ing.temp,
-        ing.concentration,
-        ing.vendor
-    ].join('|').toLowerCase();
+const alignIngredientsWithBatchInstructions = (batchInstructions, ingredients) => {
+    const alignedIngredients = [];
+
+    batchInstructions.forEach((instruction, index) => {
+        const step_no = index + 1; // Use the step number from batch instructions
+
+        const stepIngredients = ingredients
+            .filter(ing => ing.step_no === step_no && ing.incredient_description.trim() !== '') // Exclude empty ingredients
+            .map((ing, seqIndex) => ({
+                step_no,
+                step_seq: seqIndex + 1, // Assign sequential step_seq
+                ...ing
+            }));
+
+        alignedIngredients.push(...stepIngredients);
+    });
+
+    return alignedIngredients;
 };
 
 const generateStepsSQL = (data, sheetName = '') => {
@@ -151,6 +173,7 @@ const generateStepsSQL = (data, sheetName = '') => {
     }
 
     const fieldIndexes = {
+        action: actionIdx,
         vendor: getIndex('vendor'),
         incredient_description: getIndex('description'),
         type: getIndex('type'),
@@ -158,7 +181,7 @@ const generateStepsSQL = (data, sheetName = '') => {
         temp: getIndex('temp'),
         mass: getIndex('mass'),
         concentration: getIndex('concentration'),
-        mixer_needed: getIndex('mixer')
+        mixer_needed: getIndex('to_dissolve')
     };
 
     const steps = [];
@@ -166,7 +189,7 @@ const generateStepsSQL = (data, sheetName = '') => {
     const stepIngredientSeqMap = new Map(); // Track ingredient sequence per step
     const stepIdx = getIndex('step');
     let currentStepNo = null;
-    let currentStepSeq = 0;
+    // let currentStepSeq = 0;
 
     for (let i = headerRowIndex + 1; i < data.length; i++) {
         const row = data[i];
@@ -178,7 +201,7 @@ const generateStepsSQL = (data, sheetName = '') => {
 
         if (stepIsHeader) {
             currentStepNo = parseInt(rawStep);
-            currentStepSeq++;
+            // currentStepSeq++;
 
             const action = String(row[actionIdx] || '').trim();
             if (action) {
@@ -204,7 +227,7 @@ const generateStepsSQL = (data, sheetName = '') => {
                         .replace(/"\s*&\s*/g, '')
                         .replace(/\s*&\s*"/g, '')
                         .replace(/&/g, '')
-                        .replace(/"([^\"]*)"/g, '$1')
+                        .replace(/"([^"]*)"/g, '$1')
                         .trim();
 
                     const cellRefRegex = /\$?([A-Z]+)\$?(\d+)/g;
@@ -236,6 +259,7 @@ const generateStepsSQL = (data, sheetName = '') => {
             const ing = {
                 step_no: currentStepNo,
                 step_seq: currentSeq,
+                rawmaterial: row[fieldIndexes.action] || '',
                 vendor: row[fieldIndexes.vendor] || '',
                 incredient_description: normalizeDescription(cleanDescription(row[fieldIndexes.incredient_description] || '')),
                 type: row[fieldIndexes.type] || '',
@@ -252,50 +276,88 @@ const generateStepsSQL = (data, sheetName = '') => {
 
     const ingredients = Array.from(ingredientMap.values());
 
+    // Filter ingredients to only include those matching batch instructions
+    const filteredIngredients = ingredients.filter(ing =>
+        steps.some(bi => bi.step_no === ing.step_no)
+    );
+
+    // Align ingredients with batch instructions
+    const alignedIngredients = alignIngredientsWithBatchInstructions(steps, filteredIngredients);
+
+    const instruction_headers = ['Step', 'Action'];
+    const instruction_rows = steps.map((step, ind) => ({
+        Step: ind + 1,
+        Action: step.action
+    }));
+
     const stepsSQL = {
         create: `
-        CREATE TABLE batch_instructions (
-          step_no int,
-          action varchar(255),
-          ingredients varchar(255)
+        CREATE TABLE rcp_btch_card_instr (
+          Step TEXT,
+          Action TEXT
         );`.trim(),
 
         insert: steps
             .map(({ action }, index) => {
                 const step_no = index + 1; // Use index + 1 as step number
-                const uniqueIngredients = new Set(
-                    ingredients
-                        .filter(ing => ing.step_no === step_no && ing.incredient_description.trim() !== '') // Exclude empty ingredients
-                        .map(ing => ing.incredient_description)
-                ); // Remove duplicate ingredients
+                // const uniqueIngredients = new Set(
+                //     alignedIngredients
+                //         .filter(ing => ing.step_no === step_no)
+                //         .map(ing => ing.incredient_description)
+                // ); // Remove duplicate ingredients
 
-                const ingredientsStr = Array.from(uniqueIngredients).join(', '); // Join unique ingredients with commas
+                // const ingredientsStr = Array.from(uniqueIngredients).join(', '); // Join unique ingredients with commas
 
-                return `insert into batch_instructions (step_no, action, ingredients) values (${parseInt(step_no)}, ${escapeSQL(action)}, ${escapeSQL(ingredientsStr)});`;
+                return `INSERT INTO rcp_btch_card_instr (Step, Action) VALUES (${escapeSQL(step_no)}, ${escapeSQL(action)});`;
             })
             .join('\n')
     };
 
+    const instructionTable = {
+        headers: instruction_headers,
+        rows: instruction_rows
+    }
+
+    const incredient_headers = ['Step', 'rmstepseq', 'rawmaterial', 'Vendor', 'Incredient_description', 'Type', 'Speed', 'Temp', 'Concentration', 'Mixerneeded'];
+    const incredient_rows = alignedIngredients.map(ing => ({
+        Step: parseInt(ing.step_no),
+        rmstepseq: parseInt(ing.step_seq),
+        rawmaterial: ing.rawmaterial,
+        Vendor: ing.vendor,
+        Incredient_Description: ing.incredient_description,
+        Type: ing.type,
+        Speed: ing.speed,
+        Temp: ing.temp,
+        Concentration: ing.concentration,
+        Mixerneeded: ing.mixer_needed
+    }));
+
+    const incredientTable = {
+        headers: incredient_headers,
+        rows: incredient_rows
+    }
+
     const ingredientsSQL = {
         create: `
-        CREATE TABLE ingredients (
-          step_no int,
-          step_seq int,
-          vendor varchar(255),
-          incredient_description varchar(255),
-          type varchar(255),
-          speed varchar(255),
-          temp varchar(255),
-          concentration varchar(255),
-          mixer_needed varchar(255)
+        CREATE TABLE rcp_batch_step_rm_dtl (
+          Step INT,
+          rmstepseq INT,
+          rawmaterial VARCHAR(255),
+          Vendor VARCHAR(255),
+          Incredient_description VARCHAR(255),
+          Type VARCHAR(255),
+          Speed VARCHAR(255),
+          Temp VARCHAR(255),
+          Concentration VARCHAR(255),
+          Mixerneeded VARCHAR(255)
         );`.trim(),
 
-        insert: ingredients
-            .filter(ing => ing.incredient_description.trim() !== '') // Exclude empty ingredients
+        insert: alignedIngredients
             .map(ing => {
                 const values = [
                     parseInt(ing.step_no),
                     parseInt(ing.step_seq),
+                    escapeSQL(ing.rawmaterial),
                     escapeSQL(ing.vendor),
                     escapeSQL(ing.incredient_description),
                     escapeSQL(ing.type),
@@ -304,7 +366,7 @@ const generateStepsSQL = (data, sheetName = '') => {
                     escapeSQL(ing.concentration),
                     escapeSQL(ing.mixer_needed)
                 ];
-                return `insert into ingredients values (${values.join(', ')});`;
+                return `INSERT INTO rcp_batch_step_rm_dtl VALUES (${values.join(', ')});`;
             })
             .join('\n')
     };
@@ -312,16 +374,16 @@ const generateStepsSQL = (data, sheetName = '') => {
     const instructionTemplatesSQL = {
         create: `
         CREATE TABLE instruction_templates (
-          id int primary key auto_increment,
-          variable varchar(255)
+          id INT PRIMARY KEY AUTO_INCREMENT,
+          template TEXT
         );`.trim(),
 
         insert: Array.from(templateMap.keys())
             .map((tpl, idx) =>
-                `insert into instruction_templates (id, variable) values (${idx + 1}, ${escapeSQL(tpl)});`
+                `INSERT INTO instruction_templates (id, template) VALUES (${idx + 1}, ${escapeSQL(tpl)});`
             )
             .join('\n')
     };
 
-    return { stepsSQL, ingredientsSQL, instructionTemplatesSQL };
+    return { stepsSQL, ingredientsSQL, instructionTemplatesSQL, incredientTable, instructionTable };
 };

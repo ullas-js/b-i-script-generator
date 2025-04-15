@@ -1,32 +1,37 @@
-import { useState } from 'react';
+import { useCallback, useState } from 'react';
 import './page.css';
 import { readExcelFile } from '../utils/xl-fun';
 import { Link } from 'react-router-dom';
+import RecordTable from '../components/table';
 
 const ReadFormula = () => {
     const [file, setFile] = useState(null);
     const [sqlOutput, setSqlOutput] = useState({});
 
-    const downLoadSQL = () => {
-        if (!sqlOutput || Object.keys(sqlOutput).length === 0) return;
+    const [instructions, setInstructions] = useState({
+        headers: [],
+        rows: []
+    });
+    const [ingredients, setIngredients] = useState({
+        headers: [],
+        rows: []
+    });
 
-        const combinedSQL = [
-            sqlOutput.instructions?.create,
-            sqlOutput.instructions?.insert,
-            sqlOutput.ingredients?.create,
-            sqlOutput.ingredients?.insert,
-            sqlOutput.templates?.create,
-            sqlOutput.templates?.insert
-        ].filter(Boolean).join('\n\n');
+    const handleSetRows = useCallback((rows) => {
+        setInstructions(prev => ({ ...prev, rows }));
+    }, []);
 
-        const blob = new Blob([combinedSQL], { type: 'text/plain' });
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement('a');
-        a.href = url;
-        a.download = 'output.sql';
-        a.click();
-        URL.revokeObjectURL(url);
-    };
+    const handleSetHeaders = useCallback((headers) => {
+        setInstructions(prev => ({ ...prev, headers }));
+    }, []);
+
+    const handleSetIngredientRows = useCallback((rows) => {
+        setIngredients(prev => ({ ...prev, rows }));
+    }, []);
+
+    const handleSetIngredientHeaders = useCallback((headers) => {
+        setIngredients(prev => ({ ...prev, headers }));
+    }, []);
 
     return (
         <div className="read-formula-content">
@@ -38,41 +43,67 @@ const ReadFormula = () => {
                 onChange={(e) => {
                     const file = e.target.files[0];
                     if (file) {
-                        readExcelFile(file, (sql) => {
+                        readExcelFile(file, ({ sql, table }) => {
                             setSqlOutput(prev => ({
                                 ...prev,
                                 ...sql
+                            }));
+                            setInstructions(prev => ({
+                                ...prev,
+                                ...table.instructions
+                            }));
+                            setIngredients(prev => ({
+                                ...prev,
+                                ...table.ingredients
                             }));
                         });
                         setFile(file.name);
                     }
                 }}
             />
-            <button onClick={downLoadSQL} disabled={!sqlOutput} style={{ marginLeft: '1rem' }}>
+            <button onClick={() => {
+                if (!sqlOutput || Object.keys(sqlOutput).length === 0) return;
+
+                const combinedSQL = [
+                    sqlOutput.instructions?.create,
+                    sqlOutput.instructions?.insert,
+                    sqlOutput.ingredients?.create,
+                    sqlOutput.ingredients?.insert,
+                    sqlOutput.templates?.create,
+                    sqlOutput.templates?.insert
+                ].filter(Boolean).join('\n\n');
+
+                const blob = new Blob([combinedSQL], { type: 'text/plain' });
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = 'output.sql';
+                a.click();
+                URL.revokeObjectURL(url);
+            }} disabled={!sqlOutput} style={{ marginLeft: '1rem' }}>
                 Download SQL
             </button>
             <code>{file}</code>
 
-            <div className='code-block'>
-                <strong>SQL Output:</strong>
-                <br />
-                {sqlOutput && Object.keys(sqlOutput).length > 0 ? (
-                    <div>
-                        <strong>Instructions:</strong>
-                        <pre>{sqlOutput.instructions?.create}</pre>
-                        <pre>{sqlOutput.instructions?.insert}</pre>
-                        <strong>Ingredients:</strong>
-                        <pre>{sqlOutput.ingredients?.create}</pre>
-                        <pre>{sqlOutput.ingredients?.insert}</pre>
-                        <strong>Templates:</strong>
-                        <pre>{sqlOutput.templates?.create}</pre>
-                        <pre>{sqlOutput.templates?.insert}</pre>
-                    </div>
-                ) : (
-                    'No SQL output yet.'
-                )}
-                <br />
-            </div>
+            {instructions.rows.length > 0 && ingredients.rows.length > 0 && (
+                <div className='table-block'>
+                    <strong>Instructions:</strong>
+                    <RecordTable
+                        headers={instructions.headers}
+                        rows={instructions.rows}
+                        setHeaders={handleSetHeaders}
+                        setRows={handleSetRows}
+                    />
+
+                    <strong>Ingredients:</strong>
+                    <RecordTable
+                        headers={ingredients.headers}
+                        rows={ingredients.rows}
+                        setHeaders={handleSetIngredientHeaders}
+                        setRows={handleSetIngredientRows}
+                    />
+                </div>
+            )}
         </div>
     );
 };
