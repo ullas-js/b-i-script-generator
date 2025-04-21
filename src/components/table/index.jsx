@@ -2,19 +2,11 @@ import './index.css';
 import React, { createContext, useCallback, useState, useEffect, useMemo } from 'react';
 import Row from './row';
 import ContextMenu from './context-menu';
-
+import { debounce } from '../../utils/debounce';
 export const TableContext = createContext();
 
-// Debounce helper
-const debounce = (fn, delay) => {
-    let timeoutId;
-    return (...args) => {
-        clearTimeout(timeoutId);
-        timeoutId = setTimeout(() => fn(...args), delay);
-    };
-};
 
-const TableProvider = ({ headers, rows = [], setHeaders, setRows }) => {
+const TableProvider = ({ headers, rows = [], setHeaders, setRows, name }) => {
     // Local copy of data
     const [localRows, setLocalRows] = useState([]);
     const [localHeaders, setLocalHeaders] = useState([]);
@@ -50,12 +42,12 @@ const TableProvider = ({ headers, rows = [], setHeaders, setRows }) => {
 
         const target = e.currentTarget;
         setDraggedItem({ type, index });
-        
+
         e.dataTransfer.effectAllowed = 'move';
         e.dataTransfer.setData('text/plain', index.toString());
-        
+
         target.classList.add('dragging');
-        
+
         if (type === 'column') {
             const th = target;
             const rect = th.getBoundingClientRect();
@@ -73,9 +65,9 @@ const TableProvider = ({ headers, rows = [], setHeaders, setRows }) => {
     const handleDragOver = useCallback((e, type, index) => {
         e.preventDefault();
         e.dataTransfer.dropEffect = 'move';
-        
+
         if (!draggedItem || draggedItem.type !== type || draggedItem.index === index) return;
-        
+
         setDragOverItem({ type, index });
     }, [draggedItem]);
 
@@ -145,17 +137,17 @@ const TableProvider = ({ headers, rows = [], setHeaders, setRows }) => {
 
     const insertRow = useCallback((position) => {
         if (!selectedCell) return;
-        
+
         setLocalRows(prevRows => {
             const newRows = [...prevRows];
             const insertIndex = position === 'above' ? selectedCell.rowIndex : selectedCell.rowIndex + 1;
-            
+
             // Create new empty row with all headers
             const newRow = {};
             localHeaders.forEach(header => {
                 newRow[header] = '';
             });
-            
+
             newRows.splice(insertIndex, 0, newRow);
             debouncedSetRows(newRows);
             return newRows;
@@ -164,15 +156,15 @@ const TableProvider = ({ headers, rows = [], setHeaders, setRows }) => {
 
     const insertColumn = useCallback((position) => {
         if (!selectedCell) return;
-        
+
         setLocalHeaders(prevHeaders => {
             const newHeaders = [...prevHeaders];
             const insertIndex = position === 'left' ? selectedCell.colIndex : selectedCell.colIndex + 1;
-            
+
             // Generate new header name
             const newHeader = `Column ${newHeaders.length + 1}`;
             newHeaders.splice(insertIndex, 0, newHeader);
-            
+
             // Update all rows to include the new column
             setLocalRows(prevRows => {
                 const newRows = prevRows.map(row => ({
@@ -182,7 +174,7 @@ const TableProvider = ({ headers, rows = [], setHeaders, setRows }) => {
                 debouncedSetRows(newRows);
                 return newRows;
             });
-            
+
             debouncedSetHeaders(newHeaders);
             return newHeaders;
         });
@@ -193,21 +185,21 @@ const TableProvider = ({ headers, rows = [], setHeaders, setRows }) => {
         setLocalRows(prevRows => {
             const currentRows = [...prevRows];
             const headerName = localHeaders[colIndex];
-            
+
             // Ensure we have enough rows
             while (currentRows.length <= rowIndex) {
                 currentRows.push({});
             }
-            
+
             // Update the specific cell
             currentRows[rowIndex] = {
                 ...currentRows[rowIndex],
                 [headerName]: value
             };
-            
+
             // Trigger debounced update to parent
             debouncedSetRows(currentRows);
-            
+
             return currentRows;
         });
     }, [localHeaders, debouncedSetRows]);
@@ -217,7 +209,7 @@ const TableProvider = ({ headers, rows = [], setHeaders, setRows }) => {
             const newHeaders = [...prevHeaders];
             const oldHeader = newHeaders[index];
             newHeaders[index] = value;
-            
+
             // Update all rows to preserve values under the new header name
             setLocalRows(prevRows => {
                 const newRows = prevRows.map(row => {
@@ -232,10 +224,10 @@ const TableProvider = ({ headers, rows = [], setHeaders, setRows }) => {
                 debouncedSetRows(newRows);
                 return newRows;
             });
-            
+
             // Trigger debounced update to parent
             debouncedSetHeaders(newHeaders);
-            
+
             return newHeaders;
         });
     }, [debouncedSetHeaders, debouncedSetRows]);
@@ -244,7 +236,7 @@ const TableProvider = ({ headers, rows = [], setHeaders, setRows }) => {
         if (!localHeaders?.length || !localRows?.length) return '';
 
         // Generate CREATE TABLE statement
-        const createTableSQL = `CREATE TABLE records (\n${localHeaders
+        const createTableSQL = `CREATE TABLE ${name || 'records'} (\n${localHeaders
             .map(header => `    ${header} VARCHAR(255)`)
             .join(',\n')}\n);`;
 
@@ -263,15 +255,24 @@ const TableProvider = ({ headers, rows = [], setHeaders, setRows }) => {
                 const stringValue = String(value);
                 return `'${stringValue.replace(/'/g, "''")}'`;
             });
-            return `INSERT INTO records (${localHeaders.join(', ')}) VALUES (${values.join(', ')});`;
+            return `INSERT INTO ${name || 'records'} (${localHeaders.join(', ')}) VALUES (${values.join(', ')});`;
         }).join('\n');
 
-        return `${createTableSQL}\n\n${insertStatements}`;
+        const sql = `${createTableSQL}\n\n${insertStatements}`;
+        const blob = new Blob([sql], { type: 'text/plain' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `${name || 'table'}.sql`;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
     }, [localHeaders, localRows]);
 
     const deleteRow = useCallback(() => {
         if (!selectedCell || selectedCell.rowIndex < 0) return;
-        
+
         setLocalRows(prevRows => {
             const newRows = [...prevRows];
             newRows.splice(selectedCell.rowIndex, 1);
@@ -283,9 +284,9 @@ const TableProvider = ({ headers, rows = [], setHeaders, setRows }) => {
 
     const deleteColumn = useCallback(() => {
         if (!selectedCell || selectedCell.colIndex < 0) return;
-        
+
         const headerToDelete = localHeaders[selectedCell.colIndex];
-        
+
         setLocalHeaders(prevHeaders => {
             const newHeaders = [...prevHeaders];
             newHeaders.splice(selectedCell.colIndex, 1);
@@ -302,7 +303,7 @@ const TableProvider = ({ headers, rows = [], setHeaders, setRows }) => {
             debouncedSetRows(newRows);
             return newRows;
         });
-        
+
         setContextMenu(null);
     }, [selectedCell, localHeaders, debouncedSetHeaders, debouncedSetRows]);
 
@@ -321,7 +322,7 @@ const TableProvider = ({ headers, rows = [], setHeaders, setRows }) => {
                     <thead>
                         <tr>
                             {localHeaders.map((header, index) => (
-                                <th 
+                                <th
                                     key={`header-${index}`}
                                     onContextMenu={(e) => handleContextMenu(e, -1, index)}
                                     draggable
@@ -346,8 +347,8 @@ const TableProvider = ({ headers, rows = [], setHeaders, setRows }) => {
                     <tbody>
                         {localRows.length > 0 ? (
                             localRows.map((row, rowIndex) => (
-                                <Row 
-                                    key={`row-${rowIndex}`} 
+                                <Row
+                                    key={`row-${rowIndex}`}
                                     rowIndex={rowIndex}
                                     row={row}
                                     onDragStart={(e) => handleDragStart(e, 'row', rowIndex)}
@@ -376,18 +377,7 @@ const TableProvider = ({ headers, rows = [], setHeaders, setRows }) => {
                     isHeaderRow={selectedCell?.rowIndex === -1}
                 />
                 <div className="sql-container">
-                    <button onClick={() => {
-                        const sql = generateSQL();
-                        const blob = new Blob([sql], { type: 'text/plain' });
-                        const url = URL.createObjectURL(blob);
-                        const a = document.createElement('a');
-                        a.href = url;
-                        a.download = 'table.sql';
-                        document.body.appendChild(a);
-                        a.click();
-                        document.body.removeChild(a);
-                        URL.revokeObjectURL(url);
-                    }}>
+                    <button onClick={() => generateSQL()}>
                         Generate SQL
                     </button>
                 </div>
@@ -396,13 +386,14 @@ const TableProvider = ({ headers, rows = [], setHeaders, setRows }) => {
     );
 };
 
-const RecordTable = ({ headers, rows, setHeaders, setRows }) => {
+const RecordTable = ({ headers, rows, setHeaders, setRows, name }) => {
     return (
-        <TableProvider 
-            headers={headers} 
-            rows={rows} 
-            setHeaders={setHeaders} 
-            setRows={setRows} 
+        <TableProvider
+            headers={headers}
+            rows={rows}
+            setHeaders={setHeaders}
+            setRows={setRows}
+            name={name}
         />
     );
 };

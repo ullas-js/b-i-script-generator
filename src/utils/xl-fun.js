@@ -20,14 +20,17 @@ export const readExcelFile = (file, setQuery) => {
 
         const table = {
             instructions: {
-                headers: ['Step', 'Action'],
+                headers: ['Fngnumber', 'Step', 'stepseq', 'Action'],
                 rows: []
             },
             ingredients: {
-                headers: ['Step', 'rmstepseq', 'rawmaterial', 'Vendor', 'Incredient_description', 'Type', 'Speed', 'Temp', 'Concentration', 'Mixerneeded'],
+                headers: ['Step', 'stepseq', 'rmstepseq', 'rawmaterial', 'Vendor', 'Incredient_description', 'Type', 'Speed', 'Temp', 'Concentration', 'Mixerneeded'],
                 rows: []
             }
         }
+
+        const queryMap = new Map();
+        const tableMap = new Map();
 
         for (const sheetName of sheets) {
             const sheet = workbook.Sheets[sheetName];
@@ -44,6 +47,8 @@ export const readExcelFile = (file, setQuery) => {
 
             const { stepsSQL, ingredientsSQL, instructionTemplatesSQL, instructionTable, incredientTable } = generateStepsSQL(jsonData, sheetName);
 
+            queryMap.set(sheetName, { stepsSQL, ingredientsSQL, instructionTemplatesSQL });
+            tableMap.set(sheetName, { instructionTable, incredientTable });
 
             // Append only if insert statements exist
             if (stepsSQL.insert) {
@@ -189,7 +194,6 @@ const generateStepsSQL = (data, sheetName = '') => {
     const stepIngredientSeqMap = new Map(); // Track ingredient sequence per step
     const stepIdx = getIndex('step');
     let currentStepNo = null;
-    // let currentStepSeq = 0;
 
     for (let i = headerRowIndex + 1; i < data.length; i++) {
         const row = data[i];
@@ -201,21 +205,20 @@ const generateStepsSQL = (data, sheetName = '') => {
 
         if (stepIsHeader) {
             currentStepNo = parseInt(rawStep);
-            // currentStepSeq++;
 
             const action = String(row[actionIdx] || '').trim();
             if (action) {
-                // Check if the previous step has the same action
-                const previousStep = steps[steps.length - 1];
-                if (
-                    previousStep &&
-                    previousStep.action === action
-                ) {
-                    // Skip adding this step if the action is the same as the previous step
-                    continue;
+                if (action.toLowerCase().trim().startsWith('upon')) {
+                    // Make these steps step_sequenced from the previous step
+                    const prevStep = steps[steps.length - 1];
+                    if (prevStep) {
+                        const prevSeq = stepIngredientSeqMap.get(prevStep.step_no) || 0;
+                        steps.push({ step_no: prevStep.step_no, step_seq: prevSeq + 1, action });
+                    }
+                } else {
+                    // Always add the step, even if the action is the same, if ingredients differ
+                    steps.push({ step_no: currentStepNo, step_seq: 1, action });
                 }
-
-                steps.push({ step_no: currentStepNo, action });
 
                 const cellAddress = XLSX.utils.encode_cell({ r: i, c: actionIdx });
                 const formula = formulaMap.get(cellAddress);
@@ -259,6 +262,7 @@ const generateStepsSQL = (data, sheetName = '') => {
             const ing = {
                 step_no: currentStepNo,
                 step_seq: currentSeq,
+                rmstepseq: currentSeq, // Ensure rmstepseq starts from 1
                 rawmaterial: row[fieldIndexes.action] || '',
                 vendor: row[fieldIndexes.vendor] || '',
                 incredient_description: normalizeDescription(cleanDescription(row[fieldIndexes.incredient_description] || '')),
@@ -283,32 +287,30 @@ const generateStepsSQL = (data, sheetName = '') => {
 
     // Align ingredients with batch instructions
     const alignedIngredients = alignIngredientsWithBatchInstructions(steps, filteredIngredients);
+    const fngNumber = prompt('Enter Fngnumber: ');
 
-    const instruction_headers = ['Step', 'Action'];
+    const instruction_headers = ['Fngnumber', 'Step', 'stepseq', 'Action'];
     const instruction_rows = steps.map((step, ind) => ({
-        Step: ind + 1,
+        Fngnumber: fngNumber,
+        Step: step.step_no,
+        stepseq: step.step_seq,
         Action: step.action
     }));
+
 
     const stepsSQL = {
         create: `
         CREATE TABLE rcp_btch_card_instr (
-          Step TEXT,
-          Action TEXT
+            Fngnumber INT,
+            Step INT,
+            stepseq INT,
+            Action TEXT
         );`.trim(),
 
         insert: steps
             .map(({ action }, index) => {
                 const step_no = index + 1; // Use index + 1 as step number
-                // const uniqueIngredients = new Set(
-                //     alignedIngredients
-                //         .filter(ing => ing.step_no === step_no)
-                //         .map(ing => ing.incredient_description)
-                // ); // Remove duplicate ingredients
-
-                // const ingredientsStr = Array.from(uniqueIngredients).join(', '); // Join unique ingredients with commas
-
-                return `INSERT INTO rcp_btch_card_instr (Step, Action) VALUES (${escapeSQL(step_no)}, ${escapeSQL(action)});`;
+                return `INSERT INTO rcp_btch_card_instr (Fngnumber, Step, stepseq, Action) VALUES (${fngNumber}, ${escapeSQL(step_no)}, ${escapeSQL(step_no)}, ${escapeSQL(index + 1)}, ${escapeSQL(action)});`;
             })
             .join('\n')
     };
@@ -316,12 +318,13 @@ const generateStepsSQL = (data, sheetName = '') => {
     const instructionTable = {
         headers: instruction_headers,
         rows: instruction_rows
-    }
+    };
 
-    const incredient_headers = ['Step', 'rmstepseq', 'rawmaterial', 'Vendor', 'Incredient_description', 'Type', 'Speed', 'Temp', 'Concentration', 'Mixerneeded'];
+    const incredient_headers = ['Step', 'stepseq', 'rmstepseq', 'rawmaterial', 'Vendor', 'Incredient_description', 'Type', 'Speed', 'Temp', 'Concentration', 'Mixerneeded'];
     const incredient_rows = alignedIngredients.map(ing => ({
         Step: parseInt(ing.step_no),
-        rmstepseq: parseInt(ing.step_seq),
+        stepseq: parseInt(ing.step_seq),
+        rmstepseq: parseInt(ing.rmstepseq),
         rawmaterial: ing.rawmaterial,
         Vendor: ing.vendor,
         Incredient_description: ing.incredient_description,
@@ -335,12 +338,13 @@ const generateStepsSQL = (data, sheetName = '') => {
     const incredientTable = {
         headers: incredient_headers,
         rows: incredient_rows
-    }
+    };
 
     const ingredientsSQL = {
         create: `
         CREATE TABLE rcp_batch_step_rm_dtl (
           Step INT,
+          stepseq INT,
           rmstepseq INT,
           rawmaterial VARCHAR(255),
           Vendor VARCHAR(255),
@@ -355,6 +359,7 @@ const generateStepsSQL = (data, sheetName = '') => {
         insert: alignedIngredients
             .map(ing => {
                 const values = [
+                    parseInt(ing.step_no),
                     parseInt(ing.step_no),
                     parseInt(ing.step_seq),
                     escapeSQL(ing.rawmaterial),

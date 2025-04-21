@@ -80,3 +80,9 @@
     display: block;
     margin-top: 1rem;
 }
+
+/* Added horizontal overflow for tables */
+.read-formula-content .table-container {
+    overflow-x: auto;
+    width: 100%;
+}

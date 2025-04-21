@@ -29,6 +29,13 @@
     text-overflow: ellipsis;
 }
 
+/* Adjusted table cell padding and added spacing for better readability */
+.record-table td {
+    white-space: nowrap;
+    padding: 12px 16px;
+    text-align: left;
+}
+
 .record-table th {
     background-color: #f5f5f5;
     font-weight: normal;
@@ -46,6 +53,8 @@
     padding: 4px;
     border: 1px solid #ddd;
     border-radius: 4px;
+    min-width: fit-content;
+    white-space: nowrap !important;
     font-size: inherit;
     font-family: inherit;
     background-color: transparent;
@@ -56,6 +65,14 @@
     outline: none;
     border-color: #4a90e2;
     background-color: #fff;
+}
+
+/* Added nowrap to inputs inside table cells */
+.record-table td input,
+.record-table th input {
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
 }
 
 .drag-over {

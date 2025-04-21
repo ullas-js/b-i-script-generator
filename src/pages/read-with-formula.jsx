@@ -43,6 +43,15 @@ const ReadFormula = () => {
                 onChange={(e) => {
                     const file = e.target.files[0];
                     if (file) {
+                        setSqlOutput({});
+                        setInstructions({
+                            headers: [],
+                            rows: []
+                        });
+                        setIngredients({
+                            headers: [],
+                            rows: []
+                        });
                         readExcelFile(file, ({ sql, table }) => {
                             setSqlOutput(prev => ({
                                 ...prev,
@@ -93,6 +102,7 @@ const ReadFormula = () => {
                         rows={instructions.rows}
                         setHeaders={handleSetHeaders}
                         setRows={handleSetRows}
+                        name="rcp_btch_card_instr"
                     />
 
                     <strong>Ingredients:</strong>
@@ -101,6 +111,7 @@ const ReadFormula = () => {
                         rows={ingredients.rows}
                         setHeaders={handleSetIngredientHeaders}
                         setRows={handleSetIngredientRows}
+                        name="rcp_batch_step_rm_dtl"
                     />
                 </div>
             )}

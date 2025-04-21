@@ -1,9 +1,10 @@
-import { useMemo, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 import * as XLSX from 'xlsx';
 import ColumnSelector from "./columseletor";
 import './ui.css';
 import BatchExtractionMerge from "./instruction";
 import BatchExtraction from "./batch-instruction";
+import RecordTable from "./table";
 
 const ConvertFile = () => {
     const [file, setFile] = useState(null);
@@ -250,6 +251,22 @@ const ConvertFile = () => {
         setCheckMerge(true);
     }
 
+    const handleSetHeaders = useCallback((headers) => {
+        setColumns(prev => {
+            const updated = { ...prev };
+            updated[selectedSheet] = [headers, ...updated[selectedSheet].slice(1)];
+            return updated;
+        });
+    }, []);
+
+    const handleSetrows = useCallback((rows) => {
+        setColumns(prev => {
+            const updated = { ...prev };
+            updated[selectedSheet] = [updated[selectedSheet][0], ...rows];
+            return updated;
+        });
+    }, []);
+
     const [data, setData] = useState([]);
 
     return (
@@ -318,6 +335,14 @@ const ConvertFile = () => {
             </div>
 
             <div className="table-container">
+                {columns?.[selectedSheet]?.length > 0 && (
+                    <RecordTable
+                        headers={columns[selectedSheet][0]}
+                        rows={columns[selectedSheet].slice(1)}
+                        setHeaders={handleSetHeaders}
+                        setRows={handleSetrows}
+                    />
+                )}
                 {mergedColumns.length > 0 && (
                     colDirection === 'horizontal' ? (
                         <table>
