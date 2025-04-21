@@ -24,7 +24,7 @@ export const readExcelFile = (file, setQuery) => {
                 rows: []
             },
             ingredients: {
-                headers: ['Step', 'stepseq', 'rmstepseq', 'rawmaterial', 'Vendor', 'Incredient_description', 'Type', 'Speed', 'Temp', 'Concentration', 'Mixerneeded'],
+                headers: ['Fngnumber', 'Step', 'stepseq', 'rmstepseq', 'rawmaterial', 'Vendor', 'Incredient_description', 'Type', 'Speed', 'Temp', 'Concentration', 'Mixerneeded'],
                 rows: []
             }
         }
@@ -120,7 +120,7 @@ const generateStepsSQL = (data, sheetName = '') => {
     const templateMap = new Map();
 
     const headerKeywords = [
-        'step', 'step no', 'step number', 'seq', 'sequence',
+        'Fngnumber', 'step', 'step no', 'step number', 'seq', 'sequence',
         'instruction', 'action', 'procedure',
         'material', 'description', 'material description',
         'vendor', 'type', 'speed', 'temp', 'temperature',
@@ -320,20 +320,26 @@ const generateStepsSQL = (data, sheetName = '') => {
         rows: instruction_rows
     };
 
-    const incredient_headers = ['Step', 'stepseq', 'rmstepseq', 'rawmaterial', 'Vendor', 'Incredient_description', 'Type', 'Speed', 'Temp', 'Concentration', 'Mixerneeded'];
-    const incredient_rows = alignedIngredients.map(ing => ({
-        Step: parseInt(ing.step_no),
-        stepseq: parseInt(ing.step_seq),
-        rmstepseq: parseInt(ing.rmstepseq),
-        rawmaterial: ing.rawmaterial,
-        Vendor: ing.vendor,
-        Incredient_description: ing.incredient_description,
-        Type: ing.type,
-        Speed: ing.speed,
-        Temp: ing.temp,
-        Concentration: ing.concentration,
-        Mixerneeded: ing.mixer_needed
-    }));
+    const incredient_headers = ['Fngnumber','Step', 'stepseq', 'rmstepseq', 'rawmaterial', 'Vendor', 'Incredient_description', 'Type', 'Speed', 'Temp', 'Concentration', 'Mixerneeded'];
+    const incredient_rows = alignedIngredients.map(ing => {
+        const step_no = ing.step_no;
+        const prevStepSeq = alignedIngredients.find(i => i.step_no === step_no - 1)?.step_seq || 1;
+
+        return {
+            Fngnumber: fngNumber,
+            Step: parseInt(ing.step_no),
+            stepseq: parseInt(ing.step_seq),
+            rmstepseq: prevStepSeq !== 1 ? parseInt(ing.rmstepseq) : 1, // Ensure rmstepseq is 1 when stepseq is 1
+            rawmaterial: ing.rawmaterial,
+            Vendor: ing.vendor,
+            Incredient_description: ing.incredient_description,
+            Type: ing.type,
+            Speed: ing.speed,
+            Temp: ing.temp,
+            Concentration: ing.concentration,
+            Mixerneeded: ing.mixer_needed
+        }
+    });
 
     const incredientTable = {
         headers: incredient_headers,
@@ -343,6 +349,7 @@ const generateStepsSQL = (data, sheetName = '') => {
     const ingredientsSQL = {
         create: `
         CREATE TABLE rcp_batch_step_rm_dtl (
+          Fngnumber INT,
           Step INT,
           stepseq INT,
           rmstepseq INT,
@@ -359,9 +366,10 @@ const generateStepsSQL = (data, sheetName = '') => {
         insert: alignedIngredients
             .map(ing => {
                 const values = [
-                    parseInt(ing.step_no),
+                    fngNumber,
                     parseInt(ing.step_no),
                     parseInt(ing.step_seq),
+                    parseInt(ing.rmstepseq),
                     escapeSQL(ing.rawmaterial),
                     escapeSQL(ing.vendor),
                     escapeSQL(ing.incredient_description),
