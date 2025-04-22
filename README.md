@@ -36,22 +36,48 @@
   
      
 ```sql
--- Create table for finished_goods
-CREATE TABLE finished_goods (
-  batch_id VARCHAR(50),
-  item_code VARCHAR(50),
-  net_weight DECIMAL(10, 2),
-  gross_weight DECIMAL(10, 2),
-  packaging_type VARCHAR(50),
-  label_code VARCHAR(50),
-  storage_location VARCHAR(100)
+-- Create table for rcp_batch_step_rm_dtl
+CREATE TABLE rcp_batch_step_rm_dtl (
+    Fngnumber VARCHAR(255),
+    Step VARCHAR(255),
+    stepseq VARCHAR(255),
+    rmstepseq VARCHAR(255),
+    rawmaterial VARCHAR(255),
+    Vendor VARCHAR(255),
+    Incredient_description VARCHAR(255),
+    Type VARCHAR(255),
+    Speed VARCHAR(255),
+    Temp VARCHAR(255),
+    Concentration VARCHAR(255),
+    Mixerneeded VARCHAR(255)
 );
 
--- Insert data
-INSERT INTO finished_goods (batch_id, item_code, net_weight, gross_weight, packaging_type, label_code, storage_location)
-VALUES 
-  ('BATCH001', 'ITEM123', 500.00, 520.00, 'Box', 'LBL001', 'Warehouse A'),
-  ('BATCH002', 'ITEM456', 300.00, 315.00, 'Drum', 'LBL002', 'Warehouse B');
+-- Insert data for rcp_batch_step_rm_dtl
+INSERT INTO rcp_batch_step_rm_dtl (
+  Fngnumber, Step, stepseq, rmstepseq, rawmaterial, Vendor, Incredient_description, Type, Speed, Temp, Concentration, Mixerneeded
+) VALUES (
+  '92', 3, 2, 1, 'GLY20KGALPHA982134', 'Univar Solutions', 'Glycerol Monostearate', 'Liquid', 1.25, '145° F', '10%', 75
+);
+
+-- -------------------------->
+
+-- Create table for rcp_btch_card_instr
+CREATE TABLE rcp_btch_card_instr (
+    Fngnumber VARCHAR(255),
+    Step VARCHAR(255),
+    stepseq VARCHAR(255),
+    Action VARCHAR(255)
+);
+
+-- Insert data for rcp_btch_card_instr
+
+INSERT INTO rcp_btch_card_instr (Fngnumber, Step, stepseq, Action) VALUES 
+('92', 1, 1, 'Transfer 25kg of raw material from Storage Tank A into Mixing Vessel 1. Ensure flow rate is controlled.'),
+('92', 2, 1, 'Preheat 150° F water and slowly meter into Mixer. Begin agitation once temperature stabilizes.'),
+('92', 3, 1, 'Add thickening agent gradually into the vortex. Mix for 10 minutes or until fully dispersed.'),
+('92', 4, 1, 'Add 5L of ethanol to the mixer under a fume hood. Stir continuously for 3 minutes.'),
+('92', 5, 1, 'Perform pH adjustment to target range (4.5 - 5.5). Use citric acid solution dropwise while mixing.');
+
 ```
 ---
 
@@ -81,6 +107,32 @@ VALUES
 5. **Click `Generate SQL`**  
    - Your SQL file will be downloaded.
 
+```sql
+
+-- Create table for batch_datex
+
+CREATE TABLE batch_datex (
+    rm_item_id VARCHAR(255),
+    item_number VARCHAR(255),
+    vendor VARCHAR(255),
+    item VARCHAR(255),
+    type VARCHAR(255),
+    LBS_per_batch VARCHAR(255),
+    LBS_per_gal VARCHAR(255),
+    fng_item_number VARCHAR(255)
+);
+
+-- Insert data for batch_datex
+
+INSERT INTO batch_datex (rm_item_id, item_number, vendor, item, type, LBS_per_batch, LBS_per_gal, fng_item_number) VALUES 
+('10', 'RM-AX1290', 'GlobeChem', 'Maltodextrin Powder', 'Dry', '120.45', '0.12045', '92'),
+('11', 'RM-LQ5622', 'PrimeSolv', 'Glycerin USP Grade', 'Liquid', '300.00', '0.30000', '92'),
+('12', 'RM-DR9874', 'NaturX', 'Ascorbic Acid (Vitamin C)', 'Dry', '18.75', '0.01875', '92'),
+('13', 'RM-ET1220', 'SunEthanol', 'Denatured Ethanol 190 Proof', 'Liquid', '3,000.00', '', '92'),
+('14', 'RM-SW8888', 'ClearH2O', 'Spring Water Treated', 'Liquid', '620.00', '0.62000', '92');
+
+```
+
 ---
 
 ### 📊 For `finished_goods` Table:
@@ -101,5 +153,28 @@ VALUES
 
 7. **Click `Generate SQL`**  
    - The `.sql` file for your finished goods data will be downloaded.
+
+```sql
+
+-- Create table for finished_goods
+
+CREATE TABLE finished_goods (
+    finished_goods_item_number VARCHAR(255),
+    finished_good_brand_company VARCHAR(255),
+    formula_description VARCHAR(255),
+    formula_number VARCHAR(255),
+    formula_revision_date VARCHAR(255),
+    throw_ratio VARCHAR(255),
+    finished_good_unit_size VARCHAR(255),
+    finished_goods_units_per_case VARCHAR(255),
+    rm_syrup_gallons VARCHAR(255)
+);
+
+-- Insert data for finished_goods
+
+INSERT INTO finished_goods (finished_goods_item_number, finished_good_brand_company, formula_description, formula_number, formula_revision_date, throw_ratio, finished_good_unit_size, finished_goods_units_per_case, rm_syrup_gallons) 
+VALUES ('96', 'FreshFizz Co.', 'Mango Blast', 'FD-58219.3', '2024-03-08', '2.890', '16.0', '12.0', '850.00');
+
+```
 
 ---
