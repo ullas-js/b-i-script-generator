@@ -106,9 +106,9 @@ INSERT INTO rcp_btch_card_instr (Fngnumber, Step, stepseq, Action) VALUES
 ```
 ---
 
-## 🏷️ Extracting **Batch Datex / Finished Goods Table**
+## 🏷️ Extracting **Batch Datex / Finished Goods Table / Raw Materials**
 
-### 📦 For `batch_datex` Table:
+### 📦 For `batch_datex/raw_material_item_new` Table:
 
 1. **Stay on the `Home` page**  
    This is where the batch datex extraction starts.
@@ -155,6 +155,33 @@ INSERT INTO batch_datex (rm_item_id, item_number, vendor, item, type, LBS_per_ba
 ('12', 'RM-DR9874', 'NaturX', 'Ascorbic Acid (Vitamin C)', 'Dry', '18.75', '0.01875', '92'),
 ('13', 'RM-ET1220', 'SunEthanol', 'Denatured Ethanol 190 Proof', 'Liquid', '3,000.00', '', '92'),
 ('14', 'RM-SW8888', 'ClearH2O', 'Spring Water Treated', 'Liquid', '620.00', '0.62000', '92');
+
+```
+
+```sql
+
+-- Create table for raw_material_item_new
+
+CREATE TABLE raw_material_item_new (
+    fng_item_number VARCHAR(255),
+    RMUID VARCHAR(255),
+    rm_item VARCHAR(255),
+    vendor VARCHAR(255),
+    rm_desc VARCHAR(255),
+    rm_unit VARCHAR(255),
+    rm_value VARCHAR(255),
+    units_in_lb VARCHAR(255),
+    rm_sort_for_item VARCHAR(255),
+    rm_type VARCHAR(255)
+);
+
+-- Insert data for raw_material_item_new
+
+INSERT INTO raw_material_item_new (fng_item_number, RMUID, rm_item, vendor, rm_desc, rm_unit, rm_value, units_in_lb, rm_sort_for_item, rm_type) VALUES ('40', '2', 'P000ELB', 'Greenfield', 'Ethyl Lactate Blender (22.0% ABV, 3,733.6 Gal.)', NULL, NULL, ' 29,693.94 ', NULL, 'Liquid');
+INSERT INTO raw_material_item_new (fng_item_number, RMUID, rm_item, vendor, rm_desc, rm_unit, rm_value, units_in_lb, rm_sort_for_item, rm_type) VALUES ('40', '3', 'SF-1268.2', 'Sovereign Flavors', 'Natural Fruit Punch Flavor TTB#140', NULL, NULL, ' 790.11 ', NULL, 'Liquid');
+INSERT INTO raw_material_item_new (fng_item_number, RMUID, rm_item, vendor, rm_desc, rm_unit, rm_value, units_in_lb, rm_sort_for_item, rm_type) VALUES ('40', '5', 'DPKING50LBSGR103533', 'Batory Foods', 'Sugar', NULL, NULL, ' 844.20 ', NULL, 'Dry');
+INSERT INTO raw_material_item_new (fng_item_number, RMUID, rm_item, vendor, rm_desc, rm_unit, rm_value, units_in_lb, rm_sort_for_item, rm_type) VALUES ('40', '7', 'DPK50LBSTRICA987689', 'Brenntag', 'Tripotassium Citrate', NULL, NULL, ' 46.80 ', NULL, 'Dry');
+INSERT INTO raw_material_item_new (fng_item_number, RMUID, rm_item, vendor, rm_desc, rm_unit, rm_value, units_in_lb, rm_sort_for_item, rm_type) VALUES ('40', '8', 'DPKING50LBCAJX01', 'Westco Chemicals', 'Citric Acid', NULL, NULL, ' 384.12 ', NULL, 'Dry');
 
 ```
 
