@@ -33,7 +33,26 @@
    This will download a `.sql` file containing:
    - `CREATE TABLE` statement  
    - `INSERT INTO` statements for your batch data
+  
+     
+```sql
+-- Create table for finished_goods
+CREATE TABLE finished_goods (
+  batch_id VARCHAR(50),
+  item_code VARCHAR(50),
+  net_weight DECIMAL(10, 2),
+  gross_weight DECIMAL(10, 2),
+  packaging_type VARCHAR(50),
+  label_code VARCHAR(50),
+  storage_location VARCHAR(100)
+);
 
+-- Insert data
+INSERT INTO finished_goods (batch_id, item_code, net_weight, gross_weight, packaging_type, label_code, storage_location)
+VALUES 
+  ('BATCH001', 'ITEM123', 500.00, 520.00, 'Box', 'LBL001', 'Warehouse A'),
+  ('BATCH002', 'ITEM456', 300.00, 315.00, 'Drum', 'LBL002', 'Warehouse B');
+```
 ---
 
 ## 🏷️ Extracting **Batch Datex / Finished Goods Table**
