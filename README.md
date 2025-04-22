@@ -1,3 +1,28 @@
+# 🚀 Getting Started
+
+### 📦 Clone the Repository
+
+```bash
+git clone https://github.com/your-username/your-repo-name.git
+cd your-repo-name
+```
+
+### 📁 Install Dependencies
+
+```bash
+npm install
+# or
+npm i
+```
+
+### ▶️ Run the Project Locally
+
+```bash
+npm start
+# or
+npm run start
+```
+
 # 🧪 Batch Sheet SQL Generator Guide
 
 ---
