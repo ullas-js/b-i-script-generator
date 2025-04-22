@@ -1,16 +1,39 @@
-# Script creation for batch sheets ---
+# 🧪 Batch Sheet SQL Generator Guide
 
-## for extracting batch instruction only.
+## ✨ Extracting **Batch Instructions**
 
-1. navigate to Read Formula
-2. <img width="651" alt="image" src="https://github.com/user-attachments/assets/fa202eea-7a6d-4448-9649-f65c3bf2f52b" />
-3. upload the file you want to create query from
-4. enter the fng_number to be given to that particular batch
-5. next after the table UI has been created. you can cross reference with the actual sheet and (header names according to database) make changes accordinly
-6. for adding new columns, rows -> right click on the column or row.
-7. for deleting also can do the same -> right click on the column or row.
-8. <img width="860" alt="image" src="https://github.com/user-attachments/assets/567bb79a-5b82-428e-9a91-10f4a1b4b06e" />
-9. lastly click on `Generate SQL` button to download the sql query file. (will include create table and insert table query).
+### Step-by-step walkthrough:
 
-## for extracting batch_datex / finished_goods table
+1. **Go to the `Read Formula` page**  
+   This is where everything starts.
 
+2. **Upload your Excel file**  
+   Make sure the sheet has proper step-wise batch instructions.
+
+   ![Upload Example](https://github.com/user-attachments/assets/fa202eea-7a6d-4448-9649-f65c3bf2f52b)
+
+3. **Enter the FNG Number**  
+   This identifies the specific batch you're working with.
+
+4. **Review the Auto-Generated Table**  
+   - A table will appear showing your batch steps.
+   - Cross-check with your original sheet.
+   - You can edit any **cell**, **column name**, or **row** to match your database schema.
+
+5. **Need to add or remove columns/rows?**  
+   - **Right-click** on any column/row header for options:
+     - ➕ Add new column/row  
+     - ❌ Delete column/row
+
+   ![Edit Table Example](https://github.com/user-attachments/assets/567bb79a-5b82-428e-9a91-10f4a1b4b06e)
+
+6. **All set? Click `Generate SQL`**  
+   This will download a `.sql` file containing:
+   - `CREATE TABLE` statement  
+   - `INSERT INTO` statements for your batch data
+
+---
+
+## 🏷️ Extracting **Batch Datex / Finished Goods Table**
+
+> _(Coming soon / Instructions to be added here based on finalized UI flow)_
