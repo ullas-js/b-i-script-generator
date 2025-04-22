@@ -1,10 +1,10 @@
-import { useCallback, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import * as XLSX from 'xlsx';
 import ColumnSelector from "./columseletor";
 import './ui.css';
 import BatchExtractionMerge from "./instruction";
 import BatchExtraction from "./batch-instruction";
-import RecordTable from "./table";
+import DataTable from './table/DataTable';
 
 const ConvertFile = () => {
     const [file, setFile] = useState(null);
@@ -17,6 +17,7 @@ const ConvertFile = () => {
     const [html, setHtml] = useState({});
     const [checkMerge, setCheckMerge] = useState(false);
     const [isOpen, setIsOpen] = useState(false);
+    const [previousData, setPreviousData] = useState(null);
 
     const handleFile = (e) => setFile(e.target.files[0]);
 
@@ -94,9 +95,14 @@ const ConvertFile = () => {
                     if (!cell) {
                         rowData.push(null);
                     } else if (cell.t === 'd') {
-                        rowData.push(cell.w || cell.v.toISOString());
+                        // Format date as YYYY-MM-DD
+                        const date = cell.v instanceof Date ? cell.v : new Date(cell.v);
+                        const formatted = date.toISOString().split('T')[0];
+                        rowData.push(formatted);
                     } else if (cell.t === 'n' && cell.z?.includes('d')) {
-                        const formatted = XLSX.SSF.format(cell.z, cell.v);
+                        // Handle Excel date numbers
+                        const date = XLSX.SSF.parse_date_code(cell.v);
+                        const formatted = `${date.y}-${String(date.m).padStart(2, '0')}-${String(date.d).padStart(2, '0')}`;
                         rowData.push(formatted);
                     } else {
                         rowData.push(cell.w ?? cell.v);
@@ -121,6 +127,11 @@ const ConvertFile = () => {
         );
         if (exists) return;
 
+        // Store current data as previous before adding new selection
+        if (columns[selectedSheet]?.length > 0) {
+            setPreviousData(Object.values(columns).flat().filter(row => row.length > 0));
+        }
+
         const newSelection = { sheet: selectedSheet, start, end };
         setSelections(prev => [...prev, newSelection]);
         readSheetPart(newSelection);
@@ -144,8 +155,27 @@ const ConvertFile = () => {
 
     const getSqlType = (value) => {
         if (typeof value === "number") return Number.isInteger(value) ? "INT" : "FLOAT";
-        if (typeof value === "string" && /^\d{4}-\d{2}-\d{2}$/.test(value)) return "DATE";
+        if (typeof value === "string") {
+            // Check for YYYY-MM-DD format
+            if (/^\d{4}-\d{2}-\d{2}$/.test(value)) return "DATE";
+            // Check for any other date format and convert
+            const date = new Date(value);
+            if (!isNaN(date.getTime())) return "DATE";
+        }
         return "VARCHAR(255)";
+    };
+
+    const formatSqlValue = (value) => {
+        if (value == null || value === '') return 'NULL';
+        
+        // Handle dates
+        const date = new Date(value);
+        if (!isNaN(date.getTime())) {
+            const formatted = date.toISOString().split('T')[0];
+            return `'${formatted}'`;
+        }
+        
+        return `'${(value ?? '').toString().replace(/'/g, "''").trim()}'`;
     };
 
     const replaceHeader = (header) => header ? header?.toString().toLowerCase().replace(/[\s\-()\/\\@#.,]+/g, '_').replace(/[^a-z0-9_]/g, '').replace(/^_+|_+$/g, '') : '';
@@ -163,8 +193,6 @@ const ConvertFile = () => {
                     : `col_${i}`
             );
         } else {
-            // Vertical headers (mapping
-            //  from each row's first column)
             headers = list.map((row, i) =>
                 hasHeader
                     ? replaceHeader(row[0]) || `col_${i}`
@@ -181,14 +209,12 @@ const ConvertFile = () => {
 
         const values = (colDirection === 'horizontal'
             ? list.slice(hasHeader ? 1 : 0).map(row =>
-                `(${row.map(cell => `"${(cell ?? '').toString().replace(/"/g, '\\"').trim()}"`).join(', ')})`
+                `(${row.map(cell => formatSqlValue(cell)).join(', ')})`
             )
             : list[0].map((_, colIndex) =>
-                `(${list.map(row =>
-                    `"${(row[colIndex] ?? '').toString().replace(/"/g, '\\"').trim()}"`
-                ).join(', ')})`
+                `(${list.map(row => formatSqlValue(row[colIndex])).join(', ')})`
             ).splice(hasHeader ? 1 : 0)
-        ).join(', ');
+        ).join(',\n');
 
         const insertQuery = `INSERT INTO \`${tableName}\` (${headers.map(h => `\`${h}\``).join(', ')}) VALUES ${values};`;
 
@@ -251,23 +277,15 @@ const ConvertFile = () => {
         setCheckMerge(true);
     }
 
-    const handleSetHeaders = useCallback((headers) => {
-        setColumns(prev => {
-            const updated = { ...prev };
-            updated[selectedSheet] = [headers, ...updated[selectedSheet].slice(1)];
-            return updated;
-        });
-    }, []);
-
-    const handleSetrows = useCallback((rows) => {
-        setColumns(prev => {
-            const updated = { ...prev };
-            updated[selectedSheet] = [updated[selectedSheet][0], ...rows];
-            return updated;
-        });
-    }, []);
-
     const [data, setData] = useState([]);
+
+    const handleDataChange = (newData) => {
+        // Store current data as previous before updating
+        if (data.length > 0) {
+            setPreviousData(data);
+        }
+        setData(newData);
+    };
 
     return (
         <div className="converter-wrapper">
@@ -289,10 +307,6 @@ const ConvertFile = () => {
                 ))}
             </div>
 
-            {/* <div key={selectedSheet} className="table-container">
-                <div dangerouslySetInnerHTML={{ __html: html[selectedSheet] }} />
-            </div> */}
-
             {selectedSheet && (
                 <>
                     <h3>{selectedSheet}</h3>
@@ -307,7 +321,6 @@ const ConvertFile = () => {
                     </div>
                 </>
             )}
-
 
             <div
                 style={{
@@ -335,57 +348,15 @@ const ConvertFile = () => {
             </div>
 
             <div className="table-container">
-                {columns?.[selectedSheet]?.length > 0 && (
-                    <RecordTable
-                        headers={columns[selectedSheet][0]}
-                        rows={columns[selectedSheet].slice(1)}
-                        setHeaders={handleSetHeaders}
-                        setRows={handleSetrows}
-                    />
-                )}
                 {mergedColumns.length > 0 && (
-                    colDirection === 'horizontal' ? (
-                        <table>
-                            <thead>
-                                <tr>
-                                    {hasHeader
-                                        ? (data.length > 0 ? data : mergedColumns)[0].map((cell, i) => <th key={i}>{cell}</th>)
-                                        : (data.length > 0 ? data : mergedColumns)[0].map((_, i) => <th key={i}>Column {i + 1}</th>)
-                                    }
-                                </tr>
-                            </thead>
-                            <tbody>
-                                {(data.length > 0 ? data : mergedColumns).slice(hasHeader ? 1 : 0).map((row, i) => (
-                                    <tr key={i}>
-                                        {row.map((cell, j) => <td key={j}>{cell}</td>)}
-                                    </tr>
-                                ))}
-                            </tbody>
-                        </table>
-                    ) : (
-                        <table>
-                            <thead>
-                                <tr>
-                                    {hasHeader
-                                        ? (data.length > 0 ? data : mergedColumns).map((cell, i) => {
-                                            return <th key={i}>{cell[0]}</th>;
-                                        })
-                                        :
-                                        (data.length > 0 ? data : mergedColumns).map((_, i) => (
-                                            <th key={i}>Row {i + 1}</th>
-                                        ))
-                                    }
-                                </tr>
-                            </thead>
-                            <tbody>
-                                <tr>
-                                    {(data.length > 0 ? data : mergedColumns).map((cell, i) => {
-                                        return <td key={i}>{cell[1]}</td>;
-                                    })}
-                                </tr>
-                            </tbody>
-                        </table>
-                    )
+                    <DataTable
+                        key={JSON.stringify(mergedColumns)}
+                        data={mergedColumns}
+                        hasHeader={hasHeader}
+                        colDirection={colDirection}
+                        onDataChange={handleDataChange}
+                        previousData={previousData}
+                    />
                 )}
             </div>
 

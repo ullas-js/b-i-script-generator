@@ -187,3 +187,38 @@ export const generateDynamicSQL = ({ sheetName = 'dynamic_table', headers = [], 
 
     return `${createSQL}\n\n${insertSQL}`;
 };
+
+const formatDate = (value) => {
+    if (!value) return null;
+    const date = new Date(value);
+    if (isNaN(date.getTime())) return null;
+    return date.toISOString().split('T')[0];
+};
+
+const formatSqlValue = (value) => {
+    if (value == null || value === '') return 'NULL';
+    
+    // Try parsing as date first
+    const formattedDate = formatDate(value);
+    if (formattedDate) {
+        return `'${formattedDate}'`;
+    }
+    
+    // Handle other types
+    if (typeof value === 'number') return value;
+    return `'${value.toString().replace(/'/g, "''").trim()}'`;
+};
+
+const getSqlType = (value) => {
+    if (value == null) return 'VARCHAR(255)';
+    if (typeof value === 'number') return Number.isInteger(value) ? 'INT' : 'FLOAT';
+    
+    // Check for date formats
+    const date = new Date(value);
+    if (!isNaN(date.getTime())) return 'DATE';
+    
+    return 'VARCHAR(255)';
+};
+
+// Export the utility functions
+export { formatDate, formatSqlValue, getSqlType };

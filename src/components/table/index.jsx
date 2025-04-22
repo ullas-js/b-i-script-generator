@@ -376,11 +376,12 @@ const TableProvider = ({ headers, rows = [], setHeaders, setRows, name }) => {
                     onDeleteColumn={deleteColumn}
                     isHeaderRow={selectedCell?.rowIndex === -1}
                 />
-                <div className="sql-container">
-                    <button onClick={() => generateSQL()}>
-                        Generate SQL
-                    </button>
-                </div>
+
+            </div>
+            <div className="sql-container">
+                <button onClick={() => generateSQL()}>
+                    Generate SQL
+                </button>
             </div>
         </TableContext.Provider>
     );
