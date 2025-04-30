@@ -166,7 +166,7 @@ const ConvertFile = () => {
     };
 
     const formatSqlValue = (value) => {
-        if (value == null || value === '') return 'NULL';
+        if (value == null) return 'NULL';
         
         // Handle dates
         const date = new Date(value);
@@ -175,7 +175,11 @@ const ConvertFile = () => {
             return `'${formatted}'`;
         }
         
-        return `'${(value ?? '').toString().replace(/'/g, "''").trim()}'`;
+        const t = (value).toString().replace(/'/g, "''").trim()
+
+        console.log('formatted value', t)
+
+        return t;
     };
 
     const replaceHeader = (header) => header ? header?.toString().toLowerCase().replace(/[\s\-()\/\\@#.,]+/g, '_').replace(/[^a-z0-9_]/g, '').replace(/^_+|_+$/g, '') : '';
@@ -209,10 +213,10 @@ const ConvertFile = () => {
 
         const values = (colDirection === 'horizontal'
             ? list.slice(hasHeader ? 1 : 0).map(row =>
-                `(${row.map(cell => formatSqlValue(cell)).join(', ')})`
+                `(${row.map(cell => formatSqlValue(cell) || 'NULL').join(', ')})`
             )
             : list[0].map((_, colIndex) =>
-                `(${list.map(row => formatSqlValue(row[colIndex])).join(', ')})`
+                `(${list.map(row => formatSqlValue(row[colIndex]) || 'NULL').join(', ')})`
             ).splice(hasHeader ? 1 : 0)
         ).join(',\n');
 

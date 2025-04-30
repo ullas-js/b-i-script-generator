@@ -235,8 +235,10 @@ const TableProvider = ({ headers, rows = [], setHeaders, setRows, name }) => {
     const generateSQL = useCallback(() => {
         if (!localHeaders?.length || !localRows?.length) return '';
 
+        const n = name || prompt('Enter a table name');
+
         // Generate CREATE TABLE statement
-        const createTableSQL = `CREATE TABLE ${name || 'records'} (\n${localHeaders
+        const createTableSQL = `CREATE TABLE ${n} (\n${localHeaders
             .map(header => `    ${header} VARCHAR(255)`)
             .join(',\n')}\n);`;
 
@@ -245,17 +247,17 @@ const TableProvider = ({ headers, rows = [], setHeaders, setRows, name }) => {
             const values = localHeaders.map(header => {
                 const value = row[header];
                 // Handle different types of values
-                if (value === null || value === undefined) {
+                if (value === null || value === undefined || value.toString().trim() === '') {
                     return 'NULL';
                 }
-                if (typeof value === 'number') {
+                if (typeof value === 'number' || !isNaN(value)) {
                     return value;
                 }
                 // Convert to string and escape single quotes
                 const stringValue = String(value);
-                return `'${stringValue.replace(/'/g, "''")}'`;
+                return `'${stringValue.replace(/'/g, "''").trim()}'`;
             });
-            return `INSERT INTO ${name || 'records'} (${localHeaders.join(', ')}) VALUES (${values.join(', ')});`;
+            return `INSERT INTO ${n} (${localHeaders.join(', ')}) VALUES (${values.join(', ')});`;
         }).join('\n');
 
         const sql = `${createTableSQL}\n\n${insertStatements}`;
@@ -263,7 +265,7 @@ const TableProvider = ({ headers, rows = [], setHeaders, setRows, name }) => {
         const url = URL.createObjectURL(blob);
         const a = document.createElement('a');
         a.href = url;
-        a.download = `${name || 'table'}.sql`;
+        a.download = `${n}.sql`;
         document.body.appendChild(a);
         a.click();
         document.body.removeChild(a);
@@ -387,7 +389,7 @@ const TableProvider = ({ headers, rows = [], setHeaders, setRows, name }) => {
     );
 };
 
-const RecordTable = ({ headers, rows, setHeaders, setRows, name }) => {
+const RecordTable = ({ headers, rows, setHeaders, setRows, name = '' }) => {
     return (
         <TableProvider
             headers={headers}

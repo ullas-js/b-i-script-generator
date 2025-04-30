@@ -8,7 +8,7 @@ export default function HomePage() {
             <h1>Home</h1>
             <div className="home-content__links">
                 <Link to={'/read-formula'}>Read Formula</Link>
-                <Link to={'/not-batch-instruction'}>Not Batch Instruction</Link>
+                {/* <Link aria-disabled to={'/not-batch-instruction'}>Not Batch Instruction</Link> */}
             </div>
             <ConvertFile />
         </div>

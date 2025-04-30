@@ -135,7 +135,6 @@ const DataTable = ({
                 rows={rows}
                 setHeaders={handleHeadersChange}
                 setRows={handleRowsChange}
-                name="excel_data"
             />
         </div>
     );
