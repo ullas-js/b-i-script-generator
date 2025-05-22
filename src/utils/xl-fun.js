@@ -100,26 +100,20 @@ const alignIngredientsWithBatchInstructions = (batchInstructions, ingredients) =
 
     const seen = new Set();
 
-    batchInstructions.forEach((instruction, index) => {
-        const step_no = index + 1; // Use the step number from batch instructions
+    batchInstructions.forEach((instruction) => {
+        const { step_no: Step, step_seq: stepseq, action: Action } = instruction;
 
-        ingredients.forEach((el) => {
-            const ingStepNo = parseInt(el.step_no);
-            const ingStepSeq = parseInt(el.step_seq);
+        ingredients.forEach((ingredient) => {
+            const { step_no, step_seq, rawmaterial } = ingredient;
 
-            if (step_no === ingStepNo && ingStepSeq === 1) {
-                const key = `${el.rawmaterial}`;
-                if (!seen.has(key)) {
-                    seen.add(key);
-                    alignedIngredients.push({
-                        ...el,
-                        step_no,
-                        step_seq: 1,
-                        rmstepseq: 1
-                    });
-                }
+            if (!seen.has(rawmaterial)) {
+                alignedIngredients.push({
+                    ...ingredient,
+                    action: Action
+                });
+                seen.add(rawmaterial);
             }
-        })
+        });
     });
 
     return alignedIngredients;
@@ -204,6 +198,7 @@ const generateStepsSQL = (data, sheetName = '') => {
     const stepIngredientSeqMap = new Map(); // Track ingredient sequence per step
     const stepIdx = getIndex('step');
     let currentStepNo = null;
+    let currentStepSeq = 1;
 
     for (let i = headerRowIndex + 1; i < data.length; i++) {
         const row = data[i];
@@ -214,55 +209,51 @@ const generateStepsSQL = (data, sheetName = '') => {
             /^\d+(\.0+)?$/.test(String(rawStep).trim());
 
         if (stepIsHeader) {
-            currentStepNo = parseInt(rawStep);
-
             const action = String(row[actionIdx] || '').trim();
+            if (action.toLowerCase().trim().startsWith('upon')) {
+                currentStepSeq += 1;
+            } else {
+                currentStepSeq = 1;
+                currentStepNo = parseInt(rawStep);
+            }
+
             if (action) {
-                if (action.toLowerCase().trim().startsWith('upon')) {
-                    // Make these steps step_sequenced from the previous step
-                    const prevStep = steps[steps.length - 1];
-                    if (prevStep) {
-                        const prevSeq = stepIngredientSeqMap.get(prevStep.step_no) || 0;
-                        steps.push({ step_no: prevStep.step_no, step_seq: prevSeq + 1, action });
+                // Always add the step, even if the action is the same, if ingredients differ
+                steps.push({ step_no: currentStepNo, step_seq: currentStepSeq, action });
+            }
+
+            const cellAddress = XLSX.utils.encode_cell({ r: i, c: actionIdx });
+            const formula = formulaMap.get(cellAddress);
+
+            if (formula && formula.includes('&')) {
+                let generalized = formula
+                    .replace(/^=/, '')
+                    .replace(/TEXT\(\s*([^,]+).*?\)/gi, '$1')
+                    .replace(/"\s*&\s*/g, '')
+                    .replace(/\s*&\s*"/g, '')
+                    .replace(/&/g, '')
+                    .replace(/"([^"]*)"/g, '$1')
+                    .trim();
+
+                const cellRefRegex = /\$?([A-Z]+)\$?(\d+)/g;
+                generalized = generalized.replace(cellRefRegex, (_, col, row) => {
+                    const colIndex = XLSX.utils.decode_col(col);
+                    const rowIndex = parseInt(row, 10) - 1;
+
+                    let placeholder = '';
+                    if (data[headerRowIndex]?.[colIndex]) {
+                        placeholder = String(data[headerRowIndex][colIndex]).toLowerCase().trim();
                     }
-                } else {
-                    // Always add the step, even if the action is the same, if ingredients differ
-                    steps.push({ step_no: currentStepNo, step_seq: 1, action });
-                }
-
-                const cellAddress = XLSX.utils.encode_cell({ r: i, c: actionIdx });
-                const formula = formulaMap.get(cellAddress);
-
-                if (formula && formula.includes('&')) {
-                    let generalized = formula
-                        .replace(/^=/, '')
-                        .replace(/TEXT\(\s*([^,]+).*?\)/gi, '$1')
-                        .replace(/"\s*&\s*/g, '')
-                        .replace(/\s*&\s*"/g, '')
-                        .replace(/&/g, '')
-                        .replace(/"([^"]*)"/g, '$1')
-                        .trim();
-
-                    const cellRefRegex = /\$?([A-Z]+)\$?(\d+)/g;
-                    generalized = generalized.replace(cellRefRegex, (_, col, row) => {
-                        const colIndex = XLSX.utils.decode_col(col);
-                        const rowIndex = parseInt(row, 10) - 1;
-
-                        let placeholder = '';
-                        if (data[headerRowIndex]?.[colIndex]) {
-                            placeholder = String(data[headerRowIndex][colIndex]).toLowerCase().trim();
-                        }
-                        if (!placeholder && data[rowIndex]?.[colIndex]) {
-                            placeholder = String(data[rowIndex][colIndex]).toLowerCase().trim();
-                        }
-                        placeholder = placeholder.replace(/[^a-z0-9]+/gi, '_').replace(/^_+|_+$/g, '');
-
-                        return `{${placeholder || 'unknown'}}`;
-                    });
-
-                    if (!templateMap.has(generalized)) {
-                        templateMap.set(generalized, true);
+                    if (!placeholder && data[rowIndex]?.[colIndex]) {
+                        placeholder = String(data[rowIndex][colIndex]).toLowerCase().trim();
                     }
+                    placeholder = placeholder.replace(/[^a-z0-9]+/gi, '_').replace(/^_+|_+$/g, '');
+
+                    return `{${placeholder || 'unknown'}}`;
+                });
+
+                if (!templateMap.has(generalized)) {
+                    templateMap.set(generalized, true);
                 }
             }
         } else if (currentStepNo !== null) {
@@ -271,7 +262,7 @@ const generateStepsSQL = (data, sheetName = '') => {
 
             const ing = {
                 step_no: currentStepNo,
-                step_seq: currentSeq,
+                step_seq: currentStepSeq,
                 rmstepseq: currentSeq, // Ensure rmstepseq starts from 1
                 rawmaterial: row[fieldIndexes.action] || '',
                 vendor: row[fieldIndexes.vendor] || '',
@@ -289,33 +280,93 @@ const generateStepsSQL = (data, sheetName = '') => {
     }
 
     const ingredients = Array.from(ingredientMap.values());
-
-
-    // Align ingredients with batch instructions
     const alignedIngredients = alignIngredientsWithBatchInstructions(steps, ingredients);
+
     const fngNumber = prompt('Enter Fngnumber: ');
 
+    // Define headers first
     const instruction_headers = ['Fngnumber', 'Step', 'stepseq', 'Action'];
+    const incredient_headers = ['Fngnumber', 'Step', 'stepseq', 'rmstepseq', 'rawmaterial', 'Vendor', 'Incredient_description', 'Type', 'Speed', 'Temp', 'Concentration', 'Mixerneeded'];
+
+    // Create initial instruction rows
+    const instruction_rows = steps.map((step) => ({
+        Fngnumber: fngNumber,
+        Step: step.step_no,
+        stepseq: step.step_seq,
+        Action: step.action
+    }));
+
+    // Create initial ingredient rows
+
+    let lastStepNo = null;
+    let lastStepSeq = null;
+    let rmStepCounter = 1;
+    let incredient_rows = alignedIngredients.map((ing) => {
+        const step_no = parseInt(ing.step_no);
+        const step_seq = parseInt(ing.step_seq);
+        const rawmaterial = typeof ing.rawmaterial === 'string' ? ing.rawmaterial.trim() : '';
+
+        // Reset rmstepseq counter if new step_seq begins
+        if (lastStepNo !== step_no || step_seq !== lastStepSeq) {
+            rmStepCounter = 1;
+            lastStepSeq = step_seq;
+            lastStepNo = step_no;
+        }
+
+        return {
+            Fngnumber: fngNumber,
+            Step: step_no,
+            stepseq: step_seq,
+            rmstepseq: rmStepCounter++,
+            rawmaterial: rawmaterial,
+            Vendor: ing.vendor,
+            Incredient_description: ing.incredient_description,
+            Type: ing.type,
+            Speed: ing.speed,
+            Temp: ing.temp,
+            Concentration: ing.concentration,
+            Mixerneeded: ing.mixer_needed
+        };
+    });
+
+    // Now handle duplicates and step number remapping
     const seenInstructions = new Set();
+    const stepNumberMap = new Map();
+    let newStepCounter = 1;
 
-    const instruction_rows = steps
-        .map((step) => {
-            const key = `${step.action.trim()}`;
-
-            if (seenInstructions.has(key)) {
-                return null; // Duplicate, skip
-            }
-
+    // Filter out duplicate instructions and create step number mapping
+    const filteredInstructions = instruction_rows.reduce((acc, step) => {
+        const key = `${step.Action.trim()}`;
+        if (!seenInstructions.has(key)) {
             seenInstructions.add(key);
+            if (!stepNumberMap.has(step.Step)) {
+                stepNumberMap.set(step.Step, newStepCounter++);
+            }
+            acc.push({
+                ...step,
+                Step: stepNumberMap.get(step.Step)
+            });
+        }
+        return acc;
+    }, []);
 
-            return {
-                Fngnumber: fngNumber,
-                Step: step.step_no,
-                stepseq: step.step_seq,
-                Action: step.action
-            };
-        })
-        .filter(Boolean);
+    // Update ingredient step numbers using the same mapping
+    incredient_rows = incredient_rows.filter(ing => 
+        stepNumberMap.has(ing.Step) // Only keep ingredients that belong to kept steps
+    ).map(ing => ({
+        ...ing,
+        Step: stepNumberMap.get(ing.Step)
+    }));
+
+    const instructionTable = {
+        headers: instruction_headers,
+        rows: filteredInstructions
+    };
+
+    const incredientTable = {
+        headers: incredient_headers,
+        rows: incredient_rows
+    };
 
     const stepsSQL = {
         create: `
@@ -334,50 +385,6 @@ const generateStepsSQL = (data, sheetName = '') => {
             .join('\n')
     };
 
-    const instructionTable = {
-        headers: instruction_headers,
-        rows: instruction_rows
-    };
-
-    const incredient_headers = ['Fngnumber', 'Step', 'stepseq', 'rmstepseq', 'rawmaterial', 'Vendor', 'Incredient_description', 'Type', 'Speed', 'Temp', 'Concentration', 'Mixerneeded'];
-    let incredient_rows = [];
-
-    let lastStepNo = null;
-    let rmStepCounter = 1;
-
-    alignedIngredients.forEach((ing) => {
-        const step_no = parseInt(ing.step_no);
-        const step_seq = parseInt(ing.step_seq);
-        const rawmaterial = typeof ing.rawmaterial === 'string' ? ing.rawmaterial.trim() : '';
-
-        // Reset rmstepseq counter if new step_no begins
-        if (step_no !== lastStepNo) {
-            rmStepCounter = 1;
-            lastStepNo = step_no;
-        }
-
-        incredient_rows.push({
-            Fngnumber: fngNumber,
-            Step: step_no,
-            stepseq: step_seq,
-            rmstepseq: rmStepCounter++,
-            rawmaterial: rawmaterial,
-            Vendor: ing.vendor,
-            Incredient_description: ing.incredient_description,
-            Type: ing.type,
-            Speed: ing.speed,
-            Temp: ing.temp,
-            Concentration: ing.concentration,
-            Mixerneeded: ing.mixer_needed
-        });
-    });
-
-    console.log('Incredient Rows:', incredient_rows);
-
-    const incredientTable = {
-        headers: incredient_headers,
-        rows: incredient_rows
-    };
 
     const ingredientsSQL = {
         create: `
