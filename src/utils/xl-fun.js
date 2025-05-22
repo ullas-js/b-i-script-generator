@@ -101,10 +101,10 @@ const alignIngredientsWithBatchInstructions = (batchInstructions, ingredients) =
     const seen = new Set();
 
     batchInstructions.forEach((instruction) => {
-        const { step_no: Step, step_seq: stepseq, action: Action } = instruction;
+        const { action: Action } = instruction;
 
         ingredients.forEach((ingredient) => {
-            const { step_no, step_seq, rawmaterial } = ingredient;
+            const { rawmaterial } = ingredient;
 
             if (!seen.has(rawmaterial)) {
                 alignedIngredients.push({
@@ -180,7 +180,7 @@ const generateStepsSQL = (data, sheetName = '') => {
             instructionTemplatesSQL: { create: '', insert: '' }
         };
     }
-
+console.log('actionIdx', actionIdx)
     const fieldIndexes = {
         action: actionIdx,
         vendor: getIndex('vendor'),
@@ -259,12 +259,11 @@ const generateStepsSQL = (data, sheetName = '') => {
         } else if (currentStepNo !== null) {
             const currentSeq = (stepIngredientSeqMap.get(currentStepNo) || 1);
             stepIngredientSeqMap.set(currentStepNo, currentSeq);
-
             const ing = {
                 step_no: currentStepNo,
                 step_seq: currentStepSeq,
                 rmstepseq: currentSeq, // Ensure rmstepseq starts from 1
-                rawmaterial: row[fieldIndexes.action] || '',
+                rawmaterial: `${row[fieldIndexes.action]}` || '',
                 vendor: row[fieldIndexes.vendor] || '',
                 incredient_description: normalizeDescription(cleanDescription(row[fieldIndexes.incredient_description] || '')),
                 type: row[fieldIndexes.type] || '',
@@ -304,7 +303,7 @@ const generateStepsSQL = (data, sheetName = '') => {
     let incredient_rows = alignedIngredients.map((ing) => {
         const step_no = parseInt(ing.step_no);
         const step_seq = parseInt(ing.step_seq);
-        const rawmaterial = typeof ing.rawmaterial === 'string' ? ing.rawmaterial.trim() : '';
+        const rawmaterial = ing.rawmaterial;
 
         // Reset rmstepseq counter if new step_seq begins
         if (lastStepNo !== step_no || step_seq !== lastStepSeq) {
