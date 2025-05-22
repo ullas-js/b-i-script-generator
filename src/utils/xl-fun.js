@@ -210,7 +210,7 @@ console.log('actionIdx', actionIdx)
 
         if (stepIsHeader) {
             const action = String(row[actionIdx] || '').trim();
-            if (action.toLowerCase().trim().startsWith('upon')) {
+            if (action.toLowerCase().trim().startsWith('upon') || action.toLowerCase().trim().startsWith('rinse')) {
                 currentStepSeq += 1;
             } else {
                 currentStepSeq = 1;
