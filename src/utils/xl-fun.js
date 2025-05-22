@@ -98,18 +98,28 @@ const normalizeDescription = (text) => {
 const alignIngredientsWithBatchInstructions = (batchInstructions, ingredients) => {
     const alignedIngredients = [];
 
+    const seen = new Set();
+
     batchInstructions.forEach((instruction, index) => {
         const step_no = index + 1; // Use the step number from batch instructions
 
-        const stepIngredients = ingredients
-            .filter(ing => ing.step_no === step_no && ing.incredient_description.trim() !== '') // Exclude empty ingredients
-            .map((ing, seqIndex) => ({
-                step_no,
-                step_seq: seqIndex + 1, // Assign sequential step_seq
-                ...ing
-            }));
+        ingredients.forEach((el) => {
+            const ingStepNo = parseInt(el.step_no);
+            const ingStepSeq = parseInt(el.step_seq);
 
-        alignedIngredients.push(...stepIngredients);
+            if (step_no === ingStepNo && ingStepSeq === 1) {
+                const key = `${el.rawmaterial}`;
+                if (!seen.has(key)) {
+                    seen.add(key);
+                    alignedIngredients.push({
+                        ...el,
+                        step_no,
+                        step_seq: 1,
+                        rmstepseq: 1
+                    });
+                }
+            }
+        })
     });
 
     return alignedIngredients;
@@ -256,7 +266,7 @@ const generateStepsSQL = (data, sheetName = '') => {
                 }
             }
         } else if (currentStepNo !== null) {
-            const currentSeq = (stepIngredientSeqMap.get(currentStepNo) || 0) + 1;
+            const currentSeq = (stepIngredientSeqMap.get(currentStepNo) || 1);
             stepIngredientSeqMap.set(currentStepNo, currentSeq);
 
             const ing = {
@@ -280,31 +290,32 @@ const generateStepsSQL = (data, sheetName = '') => {
 
     const ingredients = Array.from(ingredientMap.values());
 
-    // Filter ingredients to only include those matching batch instructions
-    const filteredIngredients = ingredients.filter(ing =>
-        steps.some(bi => bi.step_no === ing.step_no)
-    );
 
     // Align ingredients with batch instructions
-    const alignedIngredients = alignIngredientsWithBatchInstructions(steps, filteredIngredients);
+    const alignedIngredients = alignIngredientsWithBatchInstructions(steps, ingredients);
     const fngNumber = prompt('Enter Fngnumber: ');
 
     const instruction_headers = ['Fngnumber', 'Step', 'stepseq', 'Action'];
-    let previous = '';
-    const instruction_rows = steps.map((step, ind, self) => {
-        if (previous === step.action) {
-            console.log(`Duplicate action found: ${step.action}`);
-            return null; // Skip duplicate action
-        }
-        previous = step.action;
-        return {
-            Fngnumber: fngNumber,
-            Step: step.step_no,
-            stepseq: step.step_seq,
-            Action: step.action
-        }
-    }).filter(Boolean);
+    const seenInstructions = new Set();
 
+    const instruction_rows = steps
+        .map((step) => {
+            const key = `${step.action.trim()}`;
+
+            if (seenInstructions.has(key)) {
+                return null; // Duplicate, skip
+            }
+
+            seenInstructions.add(key);
+
+            return {
+                Fngnumber: fngNumber,
+                Step: step.step_no,
+                stepseq: step.step_seq,
+                Action: step.action
+            };
+        })
+        .filter(Boolean);
 
     const stepsSQL = {
         create: `
@@ -329,34 +340,39 @@ const generateStepsSQL = (data, sheetName = '') => {
     };
 
     const incredient_headers = ['Fngnumber', 'Step', 'stepseq', 'rmstepseq', 'rawmaterial', 'Vendor', 'Incredient_description', 'Type', 'Speed', 'Temp', 'Concentration', 'Mixerneeded'];
-    const incredient_rows = alignedIngredients.reduce((acc, ing, index, self) => {
-        const step_no = ing.step_no;
-        const prevStepSeq = alignedIngredients.find(i => i.step_no === step_no - 1)?.step_seq || 1;
-        const current = ing.rawmaterial;
+    let incredient_rows = [];
 
-        if (index > 0 && self[index - 1].rawmaterial === current) {
-            // skip duplicate rawmaterial
-            return acc;
+    let lastStepNo = null;
+    let rmStepCounter = 1;
+
+    alignedIngredients.forEach((ing) => {
+        const step_no = parseInt(ing.step_no);
+        const step_seq = parseInt(ing.step_seq);
+        const rawmaterial = typeof ing.rawmaterial === 'string' ? ing.rawmaterial.trim() : '';
+
+        // Reset rmstepseq counter if new step_no begins
+        if (step_no !== lastStepNo) {
+            rmStepCounter = 1;
+            lastStepNo = step_no;
         }
 
-        return [
-            ...acc,
-            {
-                Fngnumber: fngNumber,
-                Step: parseInt(ing.step_no),
-                stepseq: parseInt(ing.step_seq),
-                rmstepseq: prevStepSeq !== 1 ? parseInt(ing.rmstepseq) : 1, // Ensure rmstepseq is 1 when stepseq is 1
-                rawmaterial: ing.rawmaterial,
-                Vendor: ing.vendor,
-                Incredient_description: ing.incredient_description,
-                Type: ing.type,
-                Speed: ing.speed,
-                Temp: ing.temp,
-                Concentration: ing.concentration,
-                Mixerneeded: ing.mixer_needed
-            }
-        ]
-    }, []);
+        incredient_rows.push({
+            Fngnumber: fngNumber,
+            Step: step_no,
+            stepseq: step_seq,
+            rmstepseq: rmStepCounter++,
+            rawmaterial: rawmaterial,
+            Vendor: ing.vendor,
+            Incredient_description: ing.incredient_description,
+            Type: ing.type,
+            Speed: ing.speed,
+            Temp: ing.temp,
+            Concentration: ing.concentration,
+            Mixerneeded: ing.mixer_needed
+        });
+    });
+
+    console.log('Incredient Rows:', incredient_rows);
 
     const incredientTable = {
         headers: incredient_headers,
