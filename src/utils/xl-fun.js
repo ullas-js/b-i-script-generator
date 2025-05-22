@@ -290,12 +290,20 @@ const generateStepsSQL = (data, sheetName = '') => {
     const fngNumber = prompt('Enter Fngnumber: ');
 
     const instruction_headers = ['Fngnumber', 'Step', 'stepseq', 'Action'];
-    const instruction_rows = steps.map((step, ind) => ({
-        Fngnumber: fngNumber,
-        Step: step.step_no,
-        stepseq: step.step_seq,
-        Action: step.action
-    }));
+    let previous = '';
+    const instruction_rows = steps.map((step, ind, self) => {
+        if (previous === step.action) {
+            console.log(`Duplicate action found: ${step.action}`);
+            return null; // Skip duplicate action
+        }
+        previous = step.action;
+        return {
+            Fngnumber: fngNumber,
+            Step: step.step_no,
+            stepseq: step.step_seq,
+            Action: step.action
+        }
+    }).filter(Boolean);
 
 
     const stepsSQL = {
@@ -320,26 +328,35 @@ const generateStepsSQL = (data, sheetName = '') => {
         rows: instruction_rows
     };
 
-    const incredient_headers = ['Fngnumber','Step', 'stepseq', 'rmstepseq', 'rawmaterial', 'Vendor', 'Incredient_description', 'Type', 'Speed', 'Temp', 'Concentration', 'Mixerneeded'];
-    const incredient_rows = alignedIngredients.map(ing => {
+    const incredient_headers = ['Fngnumber', 'Step', 'stepseq', 'rmstepseq', 'rawmaterial', 'Vendor', 'Incredient_description', 'Type', 'Speed', 'Temp', 'Concentration', 'Mixerneeded'];
+    const incredient_rows = alignedIngredients.reduce((acc, ing, index, self) => {
         const step_no = ing.step_no;
         const prevStepSeq = alignedIngredients.find(i => i.step_no === step_no - 1)?.step_seq || 1;
+        const current = ing.rawmaterial;
 
-        return {
-            Fngnumber: fngNumber,
-            Step: parseInt(ing.step_no),
-            stepseq: parseInt(ing.step_seq),
-            rmstepseq: prevStepSeq !== 1 ? parseInt(ing.rmstepseq) : 1, // Ensure rmstepseq is 1 when stepseq is 1
-            rawmaterial: ing.rawmaterial,
-            Vendor: ing.vendor,
-            Incredient_description: ing.incredient_description,
-            Type: ing.type,
-            Speed: ing.speed,
-            Temp: ing.temp,
-            Concentration: ing.concentration,
-            Mixerneeded: ing.mixer_needed
+        if (index > 0 && self[index - 1].rawmaterial === current) {
+            // skip duplicate rawmaterial
+            return acc;
         }
-    });
+
+        return [
+            ...acc,
+            {
+                Fngnumber: fngNumber,
+                Step: parseInt(ing.step_no),
+                stepseq: parseInt(ing.step_seq),
+                rmstepseq: prevStepSeq !== 1 ? parseInt(ing.rmstepseq) : 1, // Ensure rmstepseq is 1 when stepseq is 1
+                rawmaterial: ing.rawmaterial,
+                Vendor: ing.vendor,
+                Incredient_description: ing.incredient_description,
+                Type: ing.type,
+                Speed: ing.speed,
+                Temp: ing.temp,
+                Concentration: ing.concentration,
+                Mixerneeded: ing.mixer_needed
+            }
+        ]
+    }, []);
 
     const incredientTable = {
         headers: incredient_headers,
